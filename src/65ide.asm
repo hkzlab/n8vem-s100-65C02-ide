@@ -79,13 +79,8 @@ IDEInit:	.(
 
 			lda	READcfg8255
 			sta	IDEctrl
-			lda IDErstline
-			sta IDEportC
 
-			ldy $FF
-ResetDelay:
-			dey
-			bne ResetDelay
+			jsr IDEReset
 
 			lda #$00
 			sta IDEportC
@@ -121,6 +116,25 @@ DoneInit:
 			jsr PRINT_DONE		
 
 			pla
+			rts
+			.)
+
+IDEReset:	.(
+			pha
+
+			lda IDErstline
+			sta IDEportC
+
+			ldy $FF
+ResetDelay:
+			dey
+			bne ResetDelay
+
+			lda #$00
+			sta IDEportC
+			
+			pla
+
 			rts
 			.)
 
