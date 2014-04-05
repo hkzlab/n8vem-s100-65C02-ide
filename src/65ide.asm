@@ -132,8 +132,10 @@ DoneInit:
 
 // Low level 8bit I/O
 
-// Parameter passed in reg A
-// Returns value in A
+// Parameters
+//  A -> Register to read
+// Returns
+// A <- Read value
 IDErd8D:	.(
 			pha
 			lda	#<PRD
@@ -161,9 +163,12 @@ IDErd8D:	.(
 			rts
 			.)
 
-// Parameters are passed on stack in this way
-// 1 - data
-// 2 - register
+
+// Parameters
+//  X -> IDE Register to write on
+//  Y -> Value to write on register
+// Returns
+// 	Nothing
 IDEwr8D:	.(
 			pha
 			lda	#<PWR
@@ -194,41 +199,6 @@ IDEwr8D:	.(
 			.)
 
 // ******* UTILITY FUNCTIONS *******
-
-IDETST1:	.(
-			lda #$80
-			sta	IDEctrl
-
-			lda #$00
-			sta IDEportC
-			jsr BIGDELAY
-			lda #$01
-			sta IDEportC
-			jsr BIGDELAY
-			asl
-			sta IDEportC
-			jsr BIGDELAY
-			asl
-			sta	IDEportC
-			jsr BIGDELAY
-			asl
-			sta	IDEportC
-			jsr BIGDELAY
-			asl
-			sta IDEportC
-			jsr BIGDELAY
-			asl
-			sta IDEportC
-			jsr BIGDELAY
-			asl
-			sta IDEportC
-			jsr BIGDELAY
-			asl
-			sta IDEportC
-			jsr BIGDELAY
-
-			rts
-			.)
 
 PRINT_STRING:	.(
 STR2:
