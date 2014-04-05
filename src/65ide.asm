@@ -64,15 +64,8 @@ CLEAR2:
 			iny
 			bne	CLEAR2
 
-			lda	#<PTITLE
-			sta STR_POINTER
-			lda #>PTITLE
-			sta STR_POINTER+1
-			jsr PRINT_STRING
-
-		
-//			JSR IDETST1 ; LED testing
-			JSR IDEInit
+			jsr PRINT_TITLE
+			jsr IDEInit
 
 			jmp $F100
 		.)
@@ -97,8 +90,12 @@ ResetDelay:
 			lda #$00
 			sta IDEportC
 
-//			jsr BIGDELAY
-		
+			// DELAY
+			pha
+			lda #$FF
+			jsr DELAY
+			pla		
+
 			ldx REGshd
 			ldy #%11100000
 			jsr IDEwr8D
@@ -109,22 +106,19 @@ ReadyLoop:
 			jsr IDErd8D
 			and	#$80
 			beq DoneInit
-	//		jsr BIGDELAY
+			
+			// DELAY
+			pha
+			lda #$FF
+			jsr DELAY
+			pla		
+			
 			dex
 			bne ReadyLoop
+			jsr PRINT_ERROR
 
-			lda	#<PERROR
-			sta STR_POINTER
-			lda #>PERROR
-			sta STR_POINTER+1
-			jsr PRINT_STRING
 DoneInit:
-
-			lda	#<PDONE
-			sta STR_POINTER
-			lda #>PDONE
-			sta STR_POINTER+1
-			jsr PRINT_STRING			
+			jsr PRINT_DONE		
 
 			pla
 			rts
@@ -137,13 +131,7 @@ DoneInit:
 // Returns
 // A <- Read value
 IDErd8D:	.(
-			pha
-			lda	#<PRD
-			sta STR_POINTER
-			lda #>PRD
-			sta STR_POINTER+1
-			jsr PRINT_STRING
-			pla
+			jsr PRINT_DEB01
 
 			sta IDEportC
 			ora	IDErdline
@@ -170,13 +158,8 @@ IDErd8D:	.(
 // Returns
 // 	Nothing
 IDEwr8D:	.(
-			pha
-			lda	#<PWR
-			sta STR_POINTER
-			lda #>PWR
-			sta STR_POINTER+1
-			jsr PRINT_STRING
-			pla
+			jsr PRINT_DEB02
+
 			lda	WRITEcfg8255
 			sta IDEctrl
 			
@@ -199,6 +182,65 @@ IDEwr8D:	.(
 			.)
 
 // ******* UTILITY FUNCTIONS *******
+PRINT_TITLE:	.(
+		pha
+		lda	#<PTITLE
+		sta STR_POINTER
+		lda #>PTITLE
+		sta STR_POINTER+1
+		jsr PRINT_STRING
+		pla
+
+		rts
+		.)
+
+PRINT_ERROR:	.(
+		pha
+		lda	#<PERROR
+		sta STR_POINTER
+		lda #>PERROR
+		sta STR_POINTER+1
+		jsr PRINT_STRING
+		pla
+
+		rts
+		.)
+
+PRINT_DONE:	.(
+		pha
+		lda	#<PDONE
+		sta STR_POINTER
+		lda #>PDONE
+		sta STR_POINTER+1
+		jsr PRINT_STRING
+		pla
+
+		rts
+		.)
+
+PRINT_DEB01:	.(
+		pha
+		lda	#<PDEB01
+		sta STR_POINTER
+		lda #>PDEB01
+		sta STR_POINTER+1
+		jsr PRINT_STRING
+		pla
+
+		rts
+		.)
+
+PRINT_DEB02:	.(
+		pha
+		lda	#<PDEB02
+		sta STR_POINTER
+		lda #>PDEB02
+		sta STR_POINTER+1
+		jsr PRINT_STRING
+		pla
+
+		rts
+		.)
 
 PRINT_STRING:	.(
 STR2:
@@ -289,5 +331,6 @@ DECA:
 PTITLE:	.asc "IDE BOARD TESTER",$07,$07,$07,$07,$07,$0a,$0d,0
 PERROR:	.asc "ERROR",$07,$07,$0a,$0d,0
 PDONE:	.asc "DONE",$07,$07,$0a,$0d,0
-PWR:	.asc "WR",$0a,$0d,0
-PRD:	.asc "RD",$0a,$0d,0
+
+PDEB01:	.asc "DEB01",$0a,$0d,0
+PDEB02:	.asc "DEB02",$0a,$0d,0
