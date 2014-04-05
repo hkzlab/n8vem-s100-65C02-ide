@@ -71,6 +71,8 @@ CLEAR2:
 		.)
 
 // ****** IDE ******
+
+// IDE Drive initialization
 IDEInit:	.(
 			pha
 
@@ -119,6 +121,8 @@ DoneInit:
 			rts
 			.)
 
+// IDE Reset code
+// Takes no parameters...
 IDEReset:	.(
 			pha
 
@@ -138,12 +142,18 @@ ResetDelay:
 			rts
 			.)
 
-// Low level 8bit I/O
+IDEwaitnotbusy:	.(
+			// TODO: Implement	
+			rts
+		.)
 
+// IDE Low level 8bit I/O
+
+// IDE Register read
 // Parameters
 //  A -> Register to read
 // Returns
-// A <- Read value
+//	A <- Read value
 IDErd8D:	.(
 			jsr PRINT_DEB01
 
@@ -166,6 +176,7 @@ IDErd8D:	.(
 			.)
 
 
+// IDE Register write
 // Parameters
 //  X -> IDE Register to write on
 //  Y -> Value to write on register
