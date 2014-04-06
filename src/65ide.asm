@@ -21,7 +21,8 @@
 #define IDErdline		#$40
 #define IDErstline		#$80
 
-#define REGdata			IDEcs0line
+//#define REGdata			IDEcs0line
+#define REGdata			#%00001000
 #define REGerr			IDEcs0line + IDEa0line
 #define REGseccnt		IDEcs0line + IDEa1line
 #define REGsector		IDEcs0line + IDEa1line + IDEa0line
@@ -51,6 +52,10 @@
 
 #define SCRATCHA		$45
 #define SCRATCHB		SCRATCHA+1
+#define SCRATCHC		SCRATCHA+2
+#define SCRATCHD		SCRATCHA+3
+
+#define IDbuffer		$1500
 
 * = $5000
 MAIN:	.(
@@ -172,10 +177,33 @@ DoneNotBusy:
 			rts
 		.)
 
-//
+// Returns
+// A <- 0 OK
+// A <- FF ERROR
 IDEwaitdrq:	.(
-		// TODO ... Implement ...
-		rts
+			lda #$FF
+			sta SCRATCHA
+MoreWait:
+			lda #$FF
+Wait:
+			lda REGstatus
+			jsr IDErd8D
+			and	#%10001000
+			eor	#%00001000
+			beq DoneDRQ
+			dec
+			bne Wait
+			lda SCRATCHA
+			dec
+			beq DoneBusy
+			sta SCRATCHA
+			bra MoreWait
+DoneBusy:
+			lda #$FF
+			rts
+DoneDRQ:
+			lda #$00
+			rts
 		.)
 
 IDEGetID .(
@@ -191,10 +219,20 @@ IDEGetID .(
 			ldy COMMANDid
 			jsr IDEwr8D
 
-			// TODO ...
-			//jsr IDEwaitdrq
+			jsr IDEwaitdrq
+			and #$FF
+			bne DoneBusyDrq
 
-			// TODO ...
+			// Read ID into IDbuffer...
+			ldx	#>IDbuffer
+			ldy #<IDbuffer
+			jsr IDErd16D	
+			
+			bra Done
+			
+DoneBusyDrq:
+			jsr PRINT_BUSY_DRQ
+			bra Done
 DoneBusy:
 			jsr PRINT_BUSY
 			bra Done
@@ -205,6 +243,97 @@ Done:
 
 			rts
 		.)
+
+// IDE Low level 16bit I/O
+// Parameters
+// X -> MSB Dest. address
+// Y -> LSB Dest. address
+IDErd16D:	.(
+			phy
+			phx
+			pha
+
+			clc // Clear carry
+
+			sty SCRATCHA
+			stx SCRATCHA+1
+
+			lda #$FF
+			sta SCRATCHC
+			lda #$01
+			sta SCRATCHD
+
+BeginRead:
+			lda REGdata
+			sta IDEportC
+
+			ora IDErdline
+			sta IDEportC
+			
+			lda IDEportA // Low byte
+			sta (SCRATCHA)
+			
+			clc
+			lda SCRATCHA
+			adc 1
+			sta SCRATCHA
+			bcc RNByte
+			lda SCRATCHA+1
+			adc 1
+			sta SCRATCHA+1
+
+RNByte:
+			lda IDEportB // High byte
+			sta (SCRATCHA)
+
+			clc
+			lda SCRATCHA
+			adc 1
+			sta SCRATCHA
+			bcc ENRead
+			lda SCRATCHA+1
+			adc 1
+			sta SCRATCHA+1
+
+			// Check if we have finished one byte
+			lda SCRATCHC
+			ldx SCRATCHC
+			dex
+			stx SCRATCHC
+			and #$FF
+			bne BeginRead
+
+			// Check if we have another one to copy
+			lda SCRATCHD
+			ldx #$00
+			stx SCRATCHD
+			and #$FF
+			bne BeginRead
+
+ENRead:
+			// Deassert read line
+			lda REGdata
+			sta IDEportC
+
+			// Read status
+			lda REGstatus
+			jsr IDErd8D
+			and #$01
+			bne End
+
+			jsr PRINT_ERRORRD16R
+
+End:
+			pla
+			phx
+			phy
+
+			rts
+			.)
+
+IDEwr16D:	.(
+			rts
+			.)
 
 // IDE Low level 8bit I/O
 
@@ -290,6 +419,18 @@ PRINT_ERROR:	.(
 		rts
 		.)
 
+PRINT_ERRORRD16R:	.(
+		pha
+		lda	#<PERRORRD16
+		sta STR_POINTER
+		lda #>PERRORRD16
+		sta STR_POINTER+1
+		jsr PRINT_STRING
+		pla
+
+		rts
+		.)
+
 PRINT_DONE:	.(
 		pha
 		lda	#<PDONE
@@ -331,6 +472,18 @@ PRINT_BUSY:	.(
 		lda	#<PBUSY
 		sta STR_POINTER
 		lda #>PBUSY
+		sta STR_POINTER+1
+		jsr PRINT_STRING
+		pla
+
+		rts
+		.)
+
+PRINT_BUSY_DRQ:	.(
+		pha
+		lda	#<PBUSYDRQ
+		sta STR_POINTER
+		lda #>PBUSYDRQ
 		sta STR_POINTER+1
 		jsr PRINT_STRING
 		pla
@@ -426,8 +579,10 @@ DECA:
 
 PTITLE:	.asc "IDE BOARD TESTER",$07,$07,$07,$07,$07,$0a,$0d,0
 PERROR:	.asc "ERROR",$07,$07,$0a,$0d,0
+PERRORRD16:	.asc "ERROR RD16",$07,$07,$0a,$0d,0
 PDONE:	.asc "DONE",$07,$07,$0a,$0d,0
 PBUSY:	.asc "IDE BUSY",$0a,$0d,0
+PBUSYDRQ:	.asc "IDE BUSY DRQ",$0a,$0d,0
 
 PDEB01:	.asc "DEB01",$0a,$0d,0
 PDEB02:	.asc "DEB02",$0a,$0d,0
