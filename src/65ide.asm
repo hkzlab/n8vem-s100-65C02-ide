@@ -29,7 +29,8 @@
 #define REGcylinderMSB	IDEcs0line + IDEa2line + IDEa0line
 //#define REGshd			IDEcs0line + IDEa2line + IDEa1line
 #define REGshd			#%00001110
-#define REGcommand		IDEcs0line + IDEa2line + IDEa1line + IDEa0line
+//#define REGcommand		IDEcs0line + IDEa2line + IDEa1line + IDEa0line
+#define REGcommand		#%00001111
 //#define REGstatus		IDEcs0line + IDEa2line + IDEa1line + IDEa0line
 #define REGstatus		#%00001111	
 #define REGcontrol		IDEcs1line + IDEa2line + IDEa1line
@@ -171,6 +172,40 @@ DoneNotBusy:
 			rts
 		.)
 
+//
+IDEwaitdrq:	.(
+		// TODO ... Implement ...
+		rts
+		.)
+
+IDEGetID .(
+			pha
+			phx
+			phy
+
+			jsr IDEwaitnotbusy
+			and #$FF
+			bne DoneBusy
+
+			ldx REGcommand
+			ldy COMMANDid
+			jsr IDEwr8D
+
+			// TODO ...
+			//jsr IDEwaitdrq
+
+			// TODO ...
+DoneBusy:
+			jsr PRINT_BUSY
+			bra Done
+Done:
+			ply
+			plx
+			pla
+
+			rts
+		.)
+
 // IDE Low level 8bit I/O
 
 // IDE Register read
@@ -291,6 +326,18 @@ PRINT_DEB02:	.(
 		rts
 		.)
 
+PRINT_BUSY:	.(
+		pha
+		lda	#<PBUSY
+		sta STR_POINTER
+		lda #>PBUSY
+		sta STR_POINTER+1
+		jsr PRINT_STRING
+		pla
+
+		rts
+		.)
+
 PRINT_STRING:	.(
 STR2:
 		lda (STR_POINTER)
@@ -380,6 +427,7 @@ DECA:
 PTITLE:	.asc "IDE BOARD TESTER",$07,$07,$07,$07,$07,$0a,$0d,0
 PERROR:	.asc "ERROR",$07,$07,$0a,$0d,0
 PDONE:	.asc "DONE",$07,$07,$0a,$0d,0
+PBUSY:	.asc "IDE BUSY",$0a,$0d,0
 
 PDEB01:	.asc "DEB01",$0a,$0d,0
 PDEB02:	.asc "DEB02",$0a,$0d,0
