@@ -142,8 +142,21 @@ ResetDelay:
 			rts
 			.)
 
+// Returns
+// A <- 0 OK
+// A <- FF ERROR
 IDEwaitnotbusy:	.(
 			// TODO: Implement	
+			lda REGstatus
+			jsr IDErd8D
+			and	#%11000000
+			eor	#%01000000
+			beq DoneNotBusy
+
+			lda #$FF
+			rts
+DoneNotBusy:
+			lda #$00
 			rts
 		.)
 
