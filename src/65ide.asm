@@ -146,13 +146,24 @@ ResetDelay:
 // A <- 0 OK
 // A <- FF ERROR
 IDEwaitnotbusy:	.(
-			// TODO: Implement	
+			lda #$FF
+			sta SCRATCHA
+MoreWait:
+			lda #$FF
+Wait:
 			lda REGstatus
 			jsr IDErd8D
 			and	#%11000000
 			eor	#%01000000
 			beq DoneNotBusy
-
+			dec
+			bne Wait
+			lda SCRATCHA
+			dec
+			beq DoneBusy
+			sta SCRATCHA
+			bra MoreWait
+DoneBusy:
 			lda #$FF
 			rts
 DoneNotBusy:
