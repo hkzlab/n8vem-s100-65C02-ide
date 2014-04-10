@@ -105,6 +105,7 @@ IDEInit:	.(
 
 			ldx #$10
 ReadyLoop:
+			phx
 			lda REGstatus
 			jsr IDErd8D
 			and	#$80
@@ -116,6 +117,7 @@ ReadyLoop:
 			jsr DELAY
 			pla		
 			
+			plx
 			dex
 			bne ReadyLoop
 			jsr PRINT_ERROR
@@ -131,6 +133,7 @@ DoneInit:
 // Takes no parameters...
 IDEReset:	.(
 			pha
+			phy
 
 			lda IDErstline
 			sta IDEportC
@@ -143,6 +146,7 @@ ResetDelay:
 			lda #$00
 			sta IDEportC
 			
+			ply
 			pla
 
 			rts
