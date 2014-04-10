@@ -55,7 +55,7 @@
 #define SCRATCHC		SCRATCHA+2
 #define SCRATCHD		SCRATCHA+3
 
-#define IDbuffer		$1500
+#define IDbuffer		$3000
 
 * = $5000
 MAIN:	.(
@@ -71,7 +71,10 @@ CLEAR2:
 			bne	CLEAR2
 
 			jsr PRINT_TITLE
+			nop
 			jsr IDEInit
+			nop
+			jsr IDEGetID 
 
 			jmp $F100
 		.)
@@ -109,7 +112,7 @@ ReadyLoop:
 			lda REGstatus
 			jsr IDErd8D
 			and	#$80
-			beq DoneInit
+			beq BDoneInit
 			
 			// DELAY
 			pha
@@ -120,6 +123,7 @@ ReadyLoop:
 			plx
 			dex
 			bne ReadyLoop
+
 			jsr PRINT_ERROR
 
 DoneInit:
@@ -127,6 +131,9 @@ DoneInit:
 
 			pla
 			rts
+BDoneInit:
+			plx
+			bra DoneInit
 			.)
 
 // IDE Reset code
@@ -241,6 +248,9 @@ DoneBusy:
 			jsr PRINT_BUSY
 			bra Done
 Done:
+
+			jsr PRINT_DONE
+
 			ply
 			plx
 			pla
@@ -268,12 +278,18 @@ IDErd16D:	.(
 			sta SCRATCHD
 
 BeginRead:
+			jsr PRINT_BREAD			
+
 			lda REGdata
 			sta IDEportC
+
+			jsr BIGDELAY
 
 			ora IDErdline
 			sta IDEportC
 			
+			jsr BIGDELAY
+
 			lda IDEportA // Low byte
 			sta (SCRATCHA)
 			
@@ -299,6 +315,8 @@ RNByte:
 			adc 1
 			sta SCRATCHA+1
 
+ENRead:
+
 			// Check if we have finished one byte
 			lda SCRATCHC
 			ldx SCRATCHC
@@ -311,26 +329,29 @@ RNByte:
 			lda SCRATCHD
 			ldx #$00
 			stx SCRATCHD
+			ldx #$FF
+			stx SCRATCHC
 			and #$FF
 			bne BeginRead
 
-ENRead:
 			// Deassert read line
 			lda REGdata
 			sta IDEportC
+
+			jsr BIGDELAY
 
 			// Read status
 			lda REGstatus
 			jsr IDErd8D
 			and #$01
-			bne End
+			beq End
 
 			jsr PRINT_ERRORRD16R
 
 End:
 			pla
-			phx
-			phy
+			plx
+			ply
 
 			rts
 			.)
@@ -350,14 +371,29 @@ IDErd8D:	.(
 			jsr PRINT_DEB01
 
 			sta IDEportC
+			
+			jsr BIGDELAY
+			
 			ora	IDErdline
 			sta IDEportC
 
+			jsr BIGDELAY
+			jsr BIGDELAY
+			jsr BIGDELAY
+
 			ldx IDEportA
 			phx
-			
+		
+			jsr BIGDELAY
+			jsr BIGDELAY
+			jsr BIGDELAY
+
 			eor	IDErdline
 			sta IDEportC
+			
+			jsr BIGDELAY
+			jsr BIGDELAY
+
 			lda #$00
 			sta IDEportC
 
@@ -379,22 +415,32 @@ IDEwr8D:	.(
 
 			lda	WRITEcfg8255
 			sta IDEctrl
-			
+
+			jsr BIGDELAY
+
 			sty IDEportA
 			txa
 			sta IDEportC
+
+			jsr BIGDELAY
 
 			ora IDEwrline
 			sta IDEportC
 			eor IDEwrline
 			sta IDEportC
 
+			jsr BIGDELAY
+
 			lda #$00
 			sta IDEportC
+
+			jsr BIGDELAY
 
 			lda READcfg8255
 			sta IDEctrl
 			
+			jsr BIGDELAY
+
 			rts
 			.)
 
@@ -483,6 +529,18 @@ PRINT_BUSY:	.(
 		rts
 		.)
 
+PRINT_BREAD:	.(
+		pha
+		lda	#<PBREAD
+		sta STR_POINTER
+		lda #>PBREAD
+		sta STR_POINTER+1
+		jsr PRINT_STRING
+		pla
+
+		rts
+		.)
+
 PRINT_BUSY_DRQ:	.(
 		pha
 		lda	#<PBUSYDRQ
@@ -558,27 +616,23 @@ DLY3:
 
 BIGDELAY:	.(
 		pha
-		lda	#$01
-		sta SCRATCHB
-		lda #$FF
-		sta SCRATCHA
-BDELA:
-		dec SCRATCHB
-		beq DECA
-DELOOP
+		phx
+		phy
+
+		lda	#$FF
+BDLOOP:
+		pha
 		lda #$FF
 		jsr DELAY
-
-		bra BDELA
-DELEND:
 		pla
+		dec
+		bne BDLOOP
+		
+		ply
+		plx
+		pla
+
 		rts
-DECA:
-		DEC SCRATCHA
-		beq DELEND
-		lda #$FF
-		sta SCRATCHB
-		bra DELOOP
 		.)
 
 PTITLE:	.asc "IDE BOARD TESTER",$07,$07,$07,$07,$07,$0a,$0d,0
@@ -587,6 +641,8 @@ PERRORRD16:	.asc "ERROR RD16",$07,$07,$0a,$0d,0
 PDONE:	.asc "DONE",$07,$07,$0a,$0d,0
 PBUSY:	.asc "IDE BUSY",$0a,$0d,0
 PBUSYDRQ:	.asc "IDE BUSY DRQ",$0a,$0d,0
+
+PBREAD:	.asc "BREAD",$0a,$0d,0
 
 PDEB01:	.asc "DEB01",$0a,$0d,0
 PDEB02:	.asc "DEB02",$0a,$0d,0
