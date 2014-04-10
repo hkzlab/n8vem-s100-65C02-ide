@@ -103,7 +103,7 @@ IDEInit:	.(
 			ldy #%11100000
 			jsr IDEwr8D
 
-			ldx #$10
+			ldx #$FF
 ReadyLoop:
 			phx
 			lda REGstatus
