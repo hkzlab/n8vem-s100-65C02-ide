@@ -78,8 +78,13 @@ CLEAR2:
 			nop
 			jsr IDEGetID 
 
-		//	lda	#$15
 			lda	#$2E
+			sta STR_POINTER
+			lda #$30
+			sta STR_POINTER+1
+			jsr PRINT_STRING
+
+			lda	#$14
 			sta STR_POINTER
 			lda #$30
 			sta STR_POINTER+1
@@ -285,7 +290,7 @@ BeginRead:
 			ora IDErdline
 			sta IDEportC
 			
-			lda IDEportA // Low byte
+			lda IDEportB // High byte
 			sta (ADDRSCRATCH),Y
 			iny
 			bne	RNByte
@@ -295,7 +300,7 @@ BeginRead:
 			sta ADDRSCRATCH+1
 			ldy #$00
 RNByte:
-			lda IDEportB // High byte
+			lda IDEportA // Low byte
 			sta (ADDRSCRATCH),Y
 			iny
 			bne ENRead
