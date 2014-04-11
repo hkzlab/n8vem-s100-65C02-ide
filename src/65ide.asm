@@ -41,9 +41,9 @@
 #define	COMMANDread		#$20
 #define COMMANDwrite	#$30
 #define COMMANDinit		#$91
-#define COMMANDid		#$0EC
-#define COMMANDspindown	#$0E0
-#define	COMMANDspinup	#$0E1
+#define COMMANDid		#$EC
+#define COMMANDspindown	#$E0
+#define	COMMANDspinup	#$E1
 
 /************/
 
@@ -54,6 +54,8 @@
 #define SCRATCHB		SCRATCHA+1
 #define SCRATCHC		SCRATCHA+2
 #define SCRATCHD		SCRATCHA+3
+
+#define ADDRSCRATCH		$80
 
 #define IDbuffer		$3000
 
@@ -75,6 +77,12 @@ CLEAR2:
 			jsr IDEInit
 			nop
 			jsr IDEGetID 
+
+			lda	#$15
+			sta STR_POINTER
+			lda #$30
+			sta STR_POINTER+1
+			jsr PRINT_STRING
 
 			jmp $F100
 		.)
@@ -269,14 +277,13 @@ IDErd16D:	.(
 
 			clc // Clear carry
 
-			sty SCRATCHA
-			stx SCRATCHA+1
+			sty ADDRSCRATCH
+			stx ADDRSCRATCH+1
 
-			lda #$FF
+			ldy #$00
+
+			lda #$30
 			sta SCRATCHC
-			lda #$01
-			sta SCRATCHD
-
 BeginRead:
 			jsr PRINT_BREAD			
 
@@ -291,45 +298,32 @@ BeginRead:
 			jsr BIGDELAY
 
 			lda IDEportA // Low byte
-			sta (SCRATCHA)
+			sta (ADDRSCRATCH),Y
+			iny
+			bne	RNByte
 			
 			clc
-			lda SCRATCHA
+			lda ADDRSCRATCH+1
 			adc 1
-			sta SCRATCHA
-			bcc RNByte
-			lda SCRATCHA+1
-			adc 1
-			sta SCRATCHA+1
-
+			sta ADDRSCRATCH+1
+			ldy #$00
 RNByte:
 			lda IDEportB // High byte
-			sta (SCRATCHA)
-
+			sta (ADDRSCRATCH),Y
+			iny
+			bne ENRead
+			
 			clc
-			lda SCRATCHA
+			lda ADDRSCRATCH+1
 			adc 1
-			sta SCRATCHA
-			bcc ENRead
-			lda SCRATCHA+1
-			adc 1
-			sta SCRATCHA+1
-
+			sta ADDRSCRATCH+1
+			ldy #$00
 ENRead:
 
 			// Check if we have finished one byte
 			lda SCRATCHC
 			ldx SCRATCHC
 			dex
-			stx SCRATCHC
-			and #$FF
-			bne BeginRead
-
-			// Check if we have another one to copy
-			lda SCRATCHD
-			ldx #$00
-			stx SCRATCHD
-			ldx #$FF
 			stx SCRATCHC
 			and #$FF
 			bne BeginRead
