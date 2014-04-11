@@ -124,10 +124,7 @@ ReadyLoop:
 			beq BDoneInit
 			
 			// DELAY
-			pha
-			lda #$FF
-			jsr DELAY
-			pla		
+			jsr BIGDELAY
 			
 			plx
 			dex
@@ -344,8 +341,6 @@ IDEwr16D:	.(
 // Returns
 //	A <- Read value
 IDErd8D:	.(
-			jsr PRINT_DEB01
-
 			sta IDEportC
 			
 			ora	IDErdline
@@ -374,8 +369,6 @@ IDErd8D:	.(
 // Returns
 // 	Nothing
 IDEwr8D:	.(
-			jsr PRINT_DEB02
-
 			lda	WRITEcfg8255
 			sta IDEctrl
 
