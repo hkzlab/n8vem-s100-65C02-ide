@@ -279,9 +279,7 @@ IDErd16D:	.(
 			sty ADDRSCRATCH
 			stx ADDRSCRATCH+1
 
-			lda #$FF
-			sta SCRATCHC
-			
+			ldx #$00
 			ldy #$00
 BeginRead:
 			lda REGdata
@@ -310,13 +308,8 @@ RNByte:
 			sta ADDRSCRATCH+1
 			ldy #$00
 ENRead:
-
 			// Check if we have finished one byte
-			//lda SCRATCHC
-			ldx SCRATCHC
 			dex
-			stx SCRATCHC
-			//and #$FF
 			bne BeginRead
 
 			// Deassert read line
