@@ -78,7 +78,8 @@ CLEAR2:
 			nop
 			jsr IDEGetID 
 
-			lda	#$15
+		//	lda	#$15
+			lda	#$2E
 			sta STR_POINTER
 			lda #$30
 			sta STR_POINTER+1
@@ -275,34 +276,25 @@ IDErd16D:	.(
 			phx
 			pha
 
-			clc // Clear carry
-
 			sty ADDRSCRATCH
 			stx ADDRSCRATCH+1
 
-			ldy #$00
-
-			lda #$30
+			lda #$FF
 			sta SCRATCHC
+			
+			ldy #$00
 BeginRead:
-			jsr PRINT_BREAD			
-
 			lda REGdata
 			sta IDEportC
-
-			jsr BIGDELAY
 
 			ora IDErdline
 			sta IDEportC
 			
-			jsr BIGDELAY
-
 			lda IDEportA // Low byte
 			sta (ADDRSCRATCH),Y
 			iny
 			bne	RNByte
 			
-			clc
 			lda ADDRSCRATCH+1
 			adc 1
 			sta ADDRSCRATCH+1
@@ -313,7 +305,6 @@ RNByte:
 			iny
 			bne ENRead
 			
-			clc
 			lda ADDRSCRATCH+1
 			adc 1
 			sta ADDRSCRATCH+1
@@ -321,18 +312,16 @@ RNByte:
 ENRead:
 
 			// Check if we have finished one byte
-			lda SCRATCHC
+			//lda SCRATCHC
 			ldx SCRATCHC
 			dex
 			stx SCRATCHC
-			and #$FF
+			//and #$FF
 			bne BeginRead
 
 			// Deassert read line
 			lda REGdata
 			sta IDEportC
-
-			jsr BIGDELAY
 
 			// Read status
 			lda REGstatus
@@ -366,28 +355,15 @@ IDErd8D:	.(
 
 			sta IDEportC
 			
-			jsr BIGDELAY
-			
 			ora	IDErdline
 			sta IDEportC
-
-			jsr BIGDELAY
-			jsr BIGDELAY
-			jsr BIGDELAY
 
 			ldx IDEportA
 			phx
 		
-			jsr BIGDELAY
-			jsr BIGDELAY
-			jsr BIGDELAY
-
 			eor	IDErdline
 			sta IDEportC
 			
-			jsr BIGDELAY
-			jsr BIGDELAY
-
 			lda #$00
 			sta IDEportC
 
@@ -410,30 +386,25 @@ IDEwr8D:	.(
 			lda	WRITEcfg8255
 			sta IDEctrl
 
-			jsr BIGDELAY
 
 			sty IDEportA
 			txa
 			sta IDEportC
 
-			jsr BIGDELAY
 
 			ora IDEwrline
 			sta IDEportC
 			eor IDEwrline
 			sta IDEportC
 
-			jsr BIGDELAY
 
 			lda #$00
 			sta IDEportC
 
-			jsr BIGDELAY
 
 			lda READcfg8255
 			sta IDEctrl
 			
-			jsr BIGDELAY
 
 			rts
 			.)
