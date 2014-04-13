@@ -46,6 +46,8 @@
 #define	PREVIOUS_CHAR	$50
 #define STR_POINTER		$40
 
+#define SCRATCH			$45	// Scratch value. Do not expect to keep the data across function calls
+
 #define SCRATCHA		$45
 #define SCRATCHB		SCRATCHA+1
 #define SCRATCHC		SCRATCHA+2
@@ -91,19 +93,19 @@ CLEAR2:
 
 // ****** IDE ******
 
-// IDE Drive initialization
-// PARAMETERS - none
-// RETURNS - nothing
+/* IDE Drive initialization
+ * INVALIDATED REGISTERS:
+ *	- A
+ *
+ * PARAMETERS:
+ * RETURNS: 
+ *	- A: Init status (00: OK, FF: KO)
+ */
 IDEInit:	.(
 			// Save the used registers on stack
-			pha
 			phx
 			phy
 			php
-
-			// Clear the ZERO flag
-			lda #$FF 
-			and #$FF
 
 			// Set the 8255 to INPUT
 			lda	CFG8255_INPUT
@@ -148,6 +150,9 @@ ReadyLoop:
 			// If we got here, we couldn't get the BUSY flag to go off, something BAD happened...
 			jsr PRINT_ERROR
 
+			// Prepare the return value
+			lda #$FF
+
 DoneInit:
 			jsr PRINT_DONE		
 
@@ -155,24 +160,32 @@ DoneInit:
 			plp
 			ply
 			plx
-			pla
 
 			rts
 
 BDoneInit:	// If we got here, the busy flag went of: All is OK!
 			plx
+
+			// Prepare the return value
+			lda #$00
+
 			bra DoneInit
 			.)
 
-// IDE Reset code
-// PARAMETERS - none
-// RETURNS - nothing
+/* IDE Drive reset
+ * INVALIDATED REGISTERS:
+ * PARAMETERS:
+ * RETURNS: 
+ */
 IDEReset:	.(
 			// Save the regs
 			pha
 			phy
 			php
 
+			// Reset the ZERO flag
+			lda #$FF
+			
 			// Bring up the reset line
 			lda IDErstline
 			sta IDEportC
@@ -195,61 +208,101 @@ ResetDelay:
 			rts
 			.)
 
-// Returns
-// A <- 0 OK
-// A <- FF ERROR
+/* IDE busy/ready wait
+ * INVALIDATED REGISTERS:
+ *	- A
+ *
+ * PARAMETERS:
+ * RETURNS: 
+ *	- A: wait status (00: OK, FF: KO)
+ */
 IDEwaitnotbusy:	.(
-			lda #$FF
-			sta SCRATCHA
+			phx
+			php
+
+			// Prepare the high counter
+			ldx #$FF
+
 MoreWait:
+			// Prepare the low counter
 			lda #$FF
+
 Wait:
+			// Read the status register
 			lda REGstatus
 			jsr IDErd8D
-			and	#%11000000
-			eor	#%01000000
-			beq DoneNotBusy
+			and	#%11000000 // Keep only the first 2 bits
+			eor	#%01000000 // And check that bit 6 (DRIVE READY) is on and 7 (DRIVE BUSY) is off
+			beq DoneNotBusy // Done!
+
 			dec
-			bne Wait
-			lda SCRATCHA
-			dec
-			beq DoneBusy
-			sta SCRATCHA
+			bne Wait // Do some wait
+			dex
+			beq DoneBusy // Do some more wait
+
 			bra MoreWait
+
 DoneBusy:
+			// Prepare the return value: KO
 			lda #$FF
-			rts
+			bra DoneReturn
 DoneNotBusy:
+			// Prepare the return value: OK
 			lda #$00
+
+DoneReturn:
+			plp
+			plx
+
 			rts
 		.)
 
-// Returns
-// A <- 0 OK
-// A <- FF ERROR
+/* IDE data request wait
+ * INVALIDATED REGISTERS:
+ *	- A
+ *
+ * PARAMETERS:
+ * RETURNS: 
+ *	- A: wait status (00: OK, FF: KO)
+ */
 IDEwaitdrq:	.(
-			lda #$FF
-			sta SCRATCHA
+			phx
+			php
+
+			// Prepare the high counter
+			ldx #$FF
+
 MoreWait:
+			// Prepare the low counter
 			lda #$FF
+
 Wait:
+			// Read the status register
 			lda REGstatus
 			jsr IDErd8D
-			and	#%10001000
-			eor	#%00001000
-			beq DoneDRQ
+			and	#%10001000 // Keep only bits 7 (BUSY) and 3 (DATA REQUEST)
+			eor	#%00001000 // Check that drive is not busy and ready for a data transfer
+			beq DoneNotBusy // Done!
+
 			dec
-			bne Wait
-			lda SCRATCHA
-			dec
-			beq DoneBusy
-			sta SCRATCHA
+			bne Wait // Do some wait
+			dex
+			beq DoneBusy // Do some more wait
+
 			bra MoreWait
+
 DoneBusy:
+			// Prepare the return value: KO
 			lda #$FF
-			rts
-DoneDRQ:
+			bra DoneReturn
+DoneNotBusy:
+			// Prepare the return value: OK
 			lda #$00
+
+DoneReturn:
+			plp
+			plx
+
 			rts
 		.)
 
