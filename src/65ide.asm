@@ -17,9 +17,9 @@
 #define IDEa2line		$04
 #define IDEcs0line		$08
 #define IDEcs1line		$10
-#define IDEwrline		$20
-#define IDErdline		$40
-#define IDErstline		$80
+#define IDEwrline		#$20
+#define IDErdline		#$40
+#define IDErstline		#$80
 
 #define REGdata			#$0 + IDEcs0line
 #define REGerr			#$0 + IDEcs0line + IDEa0line
@@ -108,7 +108,6 @@ IDEInit:	.(
 			php
 
 			// Set the 8255 to INPUT
-			lda	CFG8255_INPUT
 			sta	IDEctrl
 
 			// Reset the IDE drive
@@ -183,9 +182,6 @@ IDEReset:	.(
 			phy
 			php
 
-			// Reset the ZERO flag
-			lda #$FF
-			
 			// Bring up the reset line
 			lda IDErstline
 			sta IDEportC
