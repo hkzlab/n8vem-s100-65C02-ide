@@ -53,7 +53,7 @@
 #define SCRATCHC		SCRATCHA+2
 #define SCRATCHD		SCRATCHA+3
 
-#define ADDRSCRATCH		$80
+#define IDEBUFADDR		$80
 
 #define IDbuffer		$3000
 
@@ -350,48 +350,61 @@ Done:
 			rts
 		.)
 
-// IDE Low level 16bit I/O
-// Parameters
-// X -> MSB Dest. address
-// Y -> LSB Dest. address
+/* IDE 16bit READ
+ * INVALIDATED REGISTERS:
+ *	- X,Y,A
+ *
+ *  - Invalidates SCRATCH[0], SCRATCH[1]
+ * PARAMETERS:
+ *	- X: Memory destination address (MSB)
+ *  - Y: Memory destination address (LSB)
+ * RETURNS:
+ *  - A: Read result ($00: OK, $FF: KO)
+ */
 IDErd16D:	.(
-			phy
-			phx
-			pha
+			php
 
-			sty ADDRSCRATCH
-			stx ADDRSCRATCH+1
+			// Save destination address for block buffer
+			sty IDEBUFADDR
+			stx IDEBUFADDR+1
 
-			ldx #$00
+			// Prepare to read 256 words = 512 bytes
+			ldx #$00 // Trick: we decrement this before checking, so at first dex we get FF here...
 			ldy #$00
+
 BeginRead:
+			// Set data register to read
 			lda REGdata
 			sta IDEportC
 
+			// Assert read line
 			ora IDErdline
 			sta IDEportC
-			
+		
+			// Load first word part
 			lda IDEportB // High byte
-			sta (ADDRSCRATCH),Y
-			iny
-			bne	RNByte
+			sta (IDEBUFADDR),Y // Save it
+			iny // Increase destination address
+			bne	RNByte // Check if we are increasing the address MSB
 			
-			lda ADDRSCRATCH+1
+			lda IDEBUFADDR+1
 			adc 1
-			sta ADDRSCRATCH+1
+			sta IDEBUFADDR+1
 			ldy #$00
+
 RNByte:
+			// Load second word part
 			lda IDEportA // Low byte
-			sta (ADDRSCRATCH),Y
+			sta (IDEBUFADDR),Y // Save it
 			iny
 			bne ENRead
 			
-			lda ADDRSCRATCH+1
+			lda IDEBUFADDR+1
 			adc 1
-			sta ADDRSCRATCH+1
+			sta IDEBUFADDR+1
 			ldy #$00
 ENRead:
-			// Check if we have finished one byte
+			// Check if we have read the last word or not...
 			dex
 			bne BeginRead
 
@@ -399,18 +412,25 @@ ENRead:
 			lda REGdata
 			sta IDEportC
 
-			// Read status
+			// Get read status... and check for ERROR in bit 0
 			lda REGstatus
 			jsr IDErd8D
+		
+			// Load the return value here
+			ldx #$00
+
 			and #$01
 			beq End
+
+			// Rewrite return value for error
+			ldx #$FF
 
 			jsr PRINT_ERRORRD16R
 
 End:
-			pla
-			plx
-			ply
+			txa // Put the return address in A
+
+			plp
 
 			rts
 			.)
@@ -420,12 +440,6 @@ IDEwr16D:	.(
 			.)
 
 // IDE Low level 8bit I/O
-
-// IDE Register read
-// Parameters
-//  A -> Register to read
-// Returns
-//	A <- Read value
 
 /* IDE 8bit READ
  * INVALIDATED REGISTERS:
@@ -471,13 +485,6 @@ IDErd8D:	.(
 			rts
 			.)
 
-
-// IDE Register write
-// Parameters
-//  X -> IDE Register to write on
-//  Y -> Value to write on register
-// Returns
-// 	Nothing
 /* IDE 8bit Write
  * INVALIDATED REGISTERS:
  *	- X,Y
