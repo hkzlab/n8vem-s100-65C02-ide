@@ -306,6 +306,9 @@ DoneReturn:
 			rts
 		.)
 
+/*
+ *
+ */
 IDEGetID .(
 			pha
 			phx
@@ -423,24 +426,48 @@ IDEwr16D:	.(
 //  A -> Register to read
 // Returns
 //	A <- Read value
+
+/* IDE 8bit READ
+ * INVALIDATED REGISTERS:
+ *	- A
+ *
+ * PARAMETERS:
+ *	- A: Register to read
+ * RETURNS: 
+ *	- A: wait status (00: OK, FF: KO)
+ */
 IDErd8D:	.(
+			// Save used registers
+			phx
+			php
+
+			// Set register to read...
 			sta IDEportC
-			
+		
+			// Set the read line high...
 			ora	IDErdline
 			sta IDEportC
 
+			// Read the output from drive
+			// ...and save it on the stack for now
 			ldx IDEportA
 			phx
-		
+	
+			// Set the read line low
 			eor	IDErdline
 			sta IDEportC
-			
+		
+			// Clear the register
 			lda #$00
 			sta IDEportC
 
+			// Load the result we saved on the stack
 			pla
-			sta SCRATCHA
 
+			// Recover the registers
+			plp
+			plx
+			
 			rts
 			.)
 
@@ -451,29 +478,49 @@ IDErd8D:	.(
 //  Y -> Value to write on register
 // Returns
 // 	Nothing
+/* IDE 8bit Write
+ * INVALIDATED REGISTERS:
+ *	- X,Y
+ *
+ * PARAMETERS:
+ *	- X: IDE Register to write on
+ *  - Y: Value to write on register
+ * RETURNS: 
+ */
 IDEwr8D:	.(
+			// Save the used registers
+			pha
+			php
+
+			// Set the 8255 to output mode
 			lda	CFG8255_OUTPUT
 			sta IDEctrl
 
-
+			// Write the data on the output	
 			sty IDEportA
+
+			// Select the register
 			txa
 			sta IDEportC
 
-
+			// Assert the write line
 			ora IDEwrline
 			sta IDEportC
+			// Then deassert it...
 			eor IDEwrline
 			sta IDEportC
 
-
+			// Deselect the register
 			lda #$00
 			sta IDEportC
 
-
+			// Reset the 8255 to input mode
 			lda CFG8255_INPUT
 			sta IDEctrl
-			
+	
+			// Recover used registers
+			plp
+			pla
 
 			rts
 			.)
