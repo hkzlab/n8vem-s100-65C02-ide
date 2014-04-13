@@ -2,9 +2,9 @@
 #define CONDATA			IO+$01
 #define CONSTATUS		IO+$00
 
-/**** 8255 ****/
-#define READcfg8255		#%10010010
-#define WRITEcfg8255	#%10000000
+/**** 8255 I/O modes ****/
+#define CFG8255_INPUT	#%10010010
+#define CFG8255_OUTPUT	#%10000000
 
 /**** IDE ****/
 #define IDEctrl			IO+$33
@@ -12,30 +12,26 @@
 #define IDEportB		IO+$31
 #define IDEportC		IO+$32
 
-#define IDEa0line		#$01
-#define IDEa1line		#$02
-#define IDEa2line		#$04
-#define IDEcs0line		#$08
-#define IDEcs1line		#$10
-#define IDEwrline		#$20
-#define IDErdline		#$40
-#define IDErstline		#$80
+#define IDEa0line		$01
+#define IDEa1line		$02
+#define IDEa2line		$04
+#define IDEcs0line		$08
+#define IDEcs1line		$10
+#define IDEwrline		$20
+#define IDErdline		$40
+#define IDErstline		$80
 
-//#define REGdata			IDEcs0line
-#define REGdata			#%00001000
-#define REGerr			IDEcs0line + IDEa0line
-#define REGseccnt		IDEcs0line + IDEa1line
-#define REGsector		IDEcs0line + IDEa1line + IDEa0line
-#define REGcylinderLSB	IDEcs0line + IDEa2line
-#define REGcylinderMSB	IDEcs0line + IDEa2line + IDEa0line
-//#define REGshd			IDEcs0line + IDEa2line + IDEa1line
-#define REGshd			#%00001110
-//#define REGcommand		IDEcs0line + IDEa2line + IDEa1line + IDEa0line
-#define REGcommand		#%00001111
-//#define REGstatus		IDEcs0line + IDEa2line + IDEa1line + IDEa0line
-#define REGstatus		#%00001111	
-#define REGcontrol		IDEcs1line + IDEa2line + IDEa1line
-#define REGastatus		IDEcs1line + IDEa2line + IDEa1line + IDEa0line
+#define REGdata			#$0 + IDEcs0line
+#define REGerr			#$0 + IDEcs0line + IDEa0line
+#define REGseccnt		#$0 + IDEcs0line + IDEa1line
+#define REGsector		#$0 + IDEcs0line + IDEa1line + IDEa0line
+#define REGcylinderLSB	#$0 + IDEcs0line + IDEa2line
+#define REGcylinderMSB	#$0 + IDEcs0line + IDEa2line + IDEa0line
+#define REGshd			#$0 + IDEcs0line + IDEa2line + IDEa1line
+#define REGcommand		#$0 + IDEcs0line + IDEa2line + IDEa1line + IDEa0line
+#define REGstatus		#$0 + IDEcs0line + IDEa2line + IDEa1line + IDEa0line
+#define REGcontrol		#$0 + IDEcs1line + IDEa2line + IDEa1line
+#define REGastatus		#$0 + IDEcs1line + IDEa2line + IDEa1line + IDEa0line
 
 #define COMMANDrecal	#$10
 #define	COMMANDread		#$20
@@ -96,74 +92,103 @@ CLEAR2:
 // ****** IDE ******
 
 // IDE Drive initialization
+// PARAMETERS - none
+// RETURNS - nothing
 IDEInit:	.(
+			// Save the used registers on stack
 			pha
+			phx
+			phy
+			php
 
-			lda #$FF // Clear zero flag
+			// Clear the ZERO flag
+			lda #$FF 
 			and #$FF
 
-			lda	READcfg8255
+			// Set the 8255 to INPUT
+			lda	CFG8255_INPUT
 			sta	IDEctrl
 
+			// Reset the IDE drive
 			jsr IDEReset
 
+			// Deassert all IDE control lines
 			lda #$00
 			sta IDEportC
 
-			// DELAY
+			// Add a delay here
 			pha
 			lda #$FF
 			jsr DELAY
 			pla		
 
+			// Configure SHD (Sector, Head, Drive) register:
+			// Data for IDE SDH reg (512bytes, LBA mode,single drive,head 0000)
+			// For Trk,Sec,head (non LBA) use 10100000
 			ldx REGshd
 			ldy #%11100000
-			jsr IDEwr8D
+			jsr IDEwr8D // Send the command
 
+			// Check we're ready (255 tries)
 			ldx #$FF
 ReadyLoop:
 			phx
-			lda REGstatus
+			lda REGstatus	// Read the status reg...
 			jsr IDErd8D
-			and	#$80
+			and	#$80		// ... and check that the busy flag went off!
 			beq BDoneInit
 			
 			// DELAY
-			jsr BIGDELAY
+			jsr BIGDELAY	// Wait a lot in here
 			
 			plx
 			dex
 			bne ReadyLoop
 
+			// If we got here, we couldn't get the BUSY flag to go off, something BAD happened...
 			jsr PRINT_ERROR
 
 DoneInit:
 			jsr PRINT_DONE		
 
+			// Restore from the stack
+			plp
+			ply
+			plx
 			pla
+
 			rts
-BDoneInit:
+
+BDoneInit:	// If we got here, the busy flag went of: All is OK!
 			plx
 			bra DoneInit
 			.)
 
 // IDE Reset code
-// Takes no parameters...
+// PARAMETERS - none
+// RETURNS - nothing
 IDEReset:	.(
+			// Save the regs
 			pha
 			phy
+			php
 
+			// Bring up the reset line
 			lda IDErstline
 			sta IDEportC
 
+			// And loop for a while...
 			ldy $FF
 ResetDelay:
 			dey
 			bne ResetDelay
 
+			// Then turn it off
 			lda #$00
 			sta IDEportC
-			
+		
+			// Restore from the stack
+			plp
 			ply
 			pla
 
@@ -374,7 +399,7 @@ IDErd8D:	.(
 // Returns
 // 	Nothing
 IDEwr8D:	.(
-			lda	WRITEcfg8255
+			lda	CFG8255_OUTPUT
 			sta IDEctrl
 
 
@@ -393,7 +418,7 @@ IDEwr8D:	.(
 			sta IDEportC
 
 
-			lda READcfg8255
+			lda CFG8255_INPUT
 			sta IDEctrl
 			
 
