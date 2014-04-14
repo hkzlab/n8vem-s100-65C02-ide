@@ -17,9 +17,9 @@
 #define IDEa2line		$04
 #define IDEcs0line		$08
 #define IDEcs1line		$10
-#define IDEwrline		#$20
-#define IDErdline		#$40
-#define IDErstline		#$80
+#define IDEwrline		$20
+#define IDErdline		$40
+#define IDErstline		$80
 
 #define REGdata			#$0 + IDEcs0line
 #define REGerr			#$0 + IDEcs0line + IDEa0line
@@ -183,7 +183,7 @@ IDEReset:	.(
 			php
 
 			// Bring up the reset line
-			lda IDErstline
+			lda #IDErstline
 			sta IDEportC
 
 			// And loop for a while...
@@ -374,7 +374,7 @@ BeginRead:
 			sta IDEportC
 
 			// Assert read line
-			ora IDErdline
+			ora #IDErdline
 			sta IDEportC
 		
 			// Load first word part
@@ -455,7 +455,7 @@ IDErd8D:	.(
 			sta IDEportC
 		
 			// Set the read line high...
-			ora	IDErdline
+			ora	#IDErdline
 			sta IDEportC
 
 			// Read the output from drive
@@ -464,7 +464,7 @@ IDErd8D:	.(
 			phx
 	
 			// Set the read line low
-			eor	IDErdline
+			eor	#IDErdline
 			sta IDEportC
 		
 			// Clear the register
@@ -507,10 +507,10 @@ IDEwr8D:	.(
 			sta IDEportC
 
 			// Assert the write line
-			ora IDEwrline
+			ora #IDEwrline
 			sta IDEportC
 			// Then deassert it...
-			eor IDEwrline
+			eor #IDEwrline
 			sta IDEportC
 
 			// Deselect the register
