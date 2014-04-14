@@ -461,7 +461,141 @@ End:
 			rts
 			.)
 
-IDEwr16D:	.(
+IDEwrSector:	.(
+				php
+	
+				// Write LBA data
+				jsr WRLBA
+
+				// Wait for disk not busy
+				jsr IDEwaitnotbusy
+				and #$FF
+				bne DoneError
+
+				// Send a write command
+				ldy REGcommand
+				ldx COMMANDwrite
+				jsr IDEwr8D
+
+				// Wait for the disk to be ready for transfer
+				jsr IDEwaitdrq
+				and #$FF
+				bne DoneError
+
+				// Set the 8255 to output mode
+				lda	CFG8255_OUTPUT
+				sta IDEctrl
+
+				// Prepare to write 256 words = 512 bytes
+				ldx #$00 // Trick: we decrement this before checking, so at first dex we get FF here...
+				ldy #$00
+
+BeginWrite:
+				// Store first word part
+				lda (IDEBUFADDR),Y // Load it
+				sta IDEportB // Save High byte
+				iny // Increase source address
+				bne	WNByte // Check if we are increasing the address MSB
+			
+				lda IDEBUFADDR+1
+				adc 1
+				sta IDEBUFADDR+1
+				ldy #$00
+
+WNByte:
+				// Write second word part
+				lda (IDEBUFADDR),Y // Load it
+				sta IDEportA // Low byte
+				iny
+				bne ENWrite
+			
+				lda IDEBUFADDR+1
+				adc 1
+				sta IDEBUFADDR+1
+				ldy #$00
+ENWrite:
+				// Set data register to read
+				lda REGdata
+				sta IDEportC
+
+				// Assert write line
+				ora #IDEwrline
+				sta IDEportC
+
+				// Deassert it
+				eor #IDEwrline
+				sta IDEportC
+
+				// Check if we have read the last word or not...
+				dex
+				bne BeginWrite
+
+				// Set the 8255 to input mode
+				lda	CFG8255_INPUT
+				sta IDEctrl
+
+				// Get read status... and check for ERROR in bit 0
+				lda REGstatus
+				jsr IDErd8D
+
+				and #$01
+				beq Done
+
+DoneError:
+				lda #$FF
+
+Done:
+				plp
+
+				rts
+				.)
+
+/* IDE set LBA address
+ * INVALIDATED REGISTERS:
+ *	- X,Y,A
+ *
+ * PARAMETERS:
+ *  - A: Sector number
+ *	- X: Track MSB
+ *  - Y: Track LSB
+ * RETURNS:
+ */
+WRLBA:		.(
+			php
+
+			// Clear carry
+			clc
+
+			// A contains the sector number
+			adc #$1 // Convert from 0 based numeration to 1 based (LBA)
+
+			// Save the track data on stack
+			phx
+			phy
+
+			tya // Move it to Y
+
+			// Send the sector (LBA5)
+			ldx REGsector
+			jsr IDEwr8D
+			
+			// Send cylinder LSB
+			ply
+			ldx REGcylinderLSB
+			jsr IDEwr8D
+
+			// Send cylinder MSB
+			ply
+			ldx REGcylinderMSB
+			jsr IDEwr8D
+
+			// Then set to read one sector
+			ldy #$01
+			ldx REGseccnt
+			jsr IDEwr8D
+
+			plp
+
 			rts
 			.)
 
