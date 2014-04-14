@@ -74,6 +74,9 @@ CLEAR2:
 			nop
 			jsr IDEInit
 			nop
+
+			ldx	#>IDbuffer
+			ldy #<IDbuffer
 			jsr IDEGetID 
 
 			lda	#$2E
@@ -302,46 +305,75 @@ DoneReturn:
 			rts
 		.)
 
-/*
+/* IDE Get drive ID
+ * INVALIDATED REGISTERS:
+ *	- X,Y,A
  *
+ *  - Invalidates SCRATCH[0], SCRATCH[1]
+ * PARAMETERS:
+ *	- X: Memory destination address (MSB)
+ *  - Y: Memory destination address (LSB)
+ * RETURNS:
+ *  - A: Read result ($00: OK, $FF: KO)
  */
 IDEGetID .(
-			pha
+			// Save the registers
+			php
+
+			// Temporarly save the destination address on the stack
 			phx
 			phy
 
+			// Wait for the drive to be not busy
 			jsr IDEwaitnotbusy
 			and #$FF
 			bne DoneBusy
 
+			// Send ID command
 			ldx REGcommand
 			ldy COMMANDid
 			jsr IDEwr8D
 
+			// Wait for the drive to be ready for a data transfer...
 			jsr IDEwaitdrq
 			and #$FF
 			bne DoneBusyDrq
 
+			// Recover the destination address
+			ply
+			plx
+
 			// Read ID into IDbuffer...
-			ldx	#>IDbuffer
-			ldy #<IDbuffer
 			jsr IDErd16D	
-			
+			and #$FF
+			bne DoneReadError
+
+			// Return OK
+			lda #$00
+
 			bra Done
 			
 DoneBusyDrq:
-			jsr PRINT_BUSY_DRQ
+			// Return KO
+			lda #$FF
 			bra Done
+
 DoneBusy:
-			jsr PRINT_BUSY
+			// Return KO
+			lda #$FF
 			bra Done
+
+DoneReadError:
+			// Return KO
+			lda #$FF
+			bra Done
+
 Done:
 
 			jsr PRINT_DONE
 
-			ply
-			plx
-			pla
+			// Restore the registers
+			plp
 
 			rts
 		.)
@@ -420,8 +452,6 @@ ENRead:
 
 			// Rewrite return value for error
 			ldx #$FF
-
-			jsr PRINT_ERRORRD16R
 
 End:
 			txa // Put the return address in A
@@ -553,83 +583,11 @@ PRINT_ERROR:	.(
 		rts
 		.)
 
-PRINT_ERRORRD16R:	.(
-		pha
-		lda	#<PERRORRD16
-		sta STR_POINTER
-		lda #>PERRORRD16
-		sta STR_POINTER+1
-		jsr PRINT_STRING
-		pla
-
-		rts
-		.)
-
 PRINT_DONE:	.(
 		pha
 		lda	#<PDONE
 		sta STR_POINTER
 		lda #>PDONE
-		sta STR_POINTER+1
-		jsr PRINT_STRING
-		pla
-
-		rts
-		.)
-
-PRINT_DEB01:	.(
-		pha
-		lda	#<PDEB01
-		sta STR_POINTER
-		lda #>PDEB01
-		sta STR_POINTER+1
-		jsr PRINT_STRING
-		pla
-
-		rts
-		.)
-
-PRINT_DEB02:	.(
-		pha
-		lda	#<PDEB02
-		sta STR_POINTER
-		lda #>PDEB02
-		sta STR_POINTER+1
-		jsr PRINT_STRING
-		pla
-
-		rts
-		.)
-
-PRINT_BUSY:	.(
-		pha
-		lda	#<PBUSY
-		sta STR_POINTER
-		lda #>PBUSY
-		sta STR_POINTER+1
-		jsr PRINT_STRING
-		pla
-
-		rts
-		.)
-
-PRINT_BREAD:	.(
-		pha
-		lda	#<PBREAD
-		sta STR_POINTER
-		lda #>PBREAD
-		sta STR_POINTER+1
-		jsr PRINT_STRING
-		pla
-
-		rts
-		.)
-
-PRINT_BUSY_DRQ:	.(
-		pha
-		lda	#<PBUSYDRQ
-		sta STR_POINTER
-		lda #>PBUSYDRQ
 		sta STR_POINTER+1
 		jsr PRINT_STRING
 		pla
