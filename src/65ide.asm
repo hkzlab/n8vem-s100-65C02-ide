@@ -461,93 +461,154 @@ End:
 			rts
 			.)
 
-IDEwrSector:	.(
-				php
-	
-				// Write LBA data
-				jsr WRLBA
 
-				// Wait for disk not busy
-				jsr IDEwaitnotbusy
-				and #$FF
-				bne DoneError
+/* IDE read sector
+ * INVALIDATED REGISTERS:
+ *	- X,Y,A
+ *
+ * PARAMETERS:
+ *  - A: Sector number
+ *	- X: Track MSB
+ *  - Y: Track LSB
+ * RETURNS:
+ *	- A: $00 OK, $FF ERROR
+ */
+IDErdSector:	.(
+			php
+		
+			// Select the sector
+			jsr WRLBA
 
-				// Send a write command
-				ldy REGcommand
-				ldx COMMANDwrite
-				jsr IDEwr8D
+			// Wait for disk not busy
+			jsr IDEwaitnotbusy
+			and #$FF
+			bne DoneError
 
-				// Wait for the disk to be ready for transfer
-				jsr IDEwaitdrq
-				and #$FF
-				bne DoneError
+			// Send a read command
+			ldy REGcommand
+			ldx COMMANDread
+			jsr IDEwr8D
 
-				// Set the 8255 to output mode
-				lda	CFG8255_OUTPUT
-				sta IDEctrl
+			// Wait for the disk to be ready for transfer
+			jsr IDEwaitdrq
+			and #$FF
+			bne DoneError
+		
+			// Read the sector!
+			ldx #>IDEBUFADDR
+			ldy #<IDEBUFADDR
+			jsr IDErd16D
 
-				// Prepare to write 256 words = 512 bytes
-				ldx #$00 // Trick: we decrement this before checking, so at first dex we get FF here...
-				ldy #$00
-
-BeginWrite:
-				// Store first word part
-				lda (IDEBUFADDR),Y // Load it
-				sta IDEportB // Save High byte
-				iny // Increase source address
-				bne	WNByte // Check if we are increasing the address MSB
-			
-				lda IDEBUFADDR+1
-				adc 1
-				sta IDEBUFADDR+1
-				ldy #$00
-
-WNByte:
-				// Write second word part
-				lda (IDEBUFADDR),Y // Load it
-				sta IDEportA // Low byte
-				iny
-				bne ENWrite
-			
-				lda IDEBUFADDR+1
-				adc 1
-				sta IDEBUFADDR+1
-				ldy #$00
-ENWrite:
-				// Set data register to read
-				lda REGdata
-				sta IDEportC
-
-				// Assert write line
-				ora #IDEwrline
-				sta IDEportC
-
-				// Deassert it
-				eor #IDEwrline
-				sta IDEportC
-
-				// Check if we have read the last word or not...
-				dex
-				bne BeginWrite
-
-				// Set the 8255 to input mode
-				lda	CFG8255_INPUT
-				sta IDEctrl
-
-				// Get read status... and check for ERROR in bit 0
-				lda REGstatus
-				jsr IDErd8D
-
-				and #$01
-				beq Done
+			and #$FF
+			beq Done
 
 DoneError:
-				lda #$FF
+			lda #$FF
 
 Done:
-				plp
+			plp
 
-				rts
+			rts
+			.)
+
+/* IDE write sector
+ * INVALIDATED REGISTERS:
+ *	- X,Y,A
+ *
+ * PARAMETERS:
+ *  - A: Sector number
+ *	- X: Track MSB
+ *  - Y: Track LSB
+ * RETURNS:
+ *	- A: $00 OK, $FF ERROR
+ */
+IDEwrSector:	.(
+			php
+	
+			// Write LBA data
+			jsr WRLBA
+
+			// Wait for disk not busy
+			jsr IDEwaitnotbusy
+			and #$FF
+			bne DoneError
+
+			// Send a write command
+			ldy REGcommand
+			ldx COMMANDwrite
+			jsr IDEwr8D
+
+			// Wait for the disk to be ready for transfer
+			jsr IDEwaitdrq
+			and #$FF
+			bne DoneError
+
+			// Set the 8255 to output mode
+			lda	CFG8255_OUTPUT
+			sta IDEctrl
+
+			// Prepare to write 256 words = 512 bytes
+			ldx #$00 // Trick: we decrement this before checking, so at first dex we get FF here...
+			ldy #$00
+
+BeginWrite:
+			// Store first word part
+			lda (IDEBUFADDR),Y // Load it
+			sta IDEportB // Save High byte
+			iny // Increase source address
+			bne	WNByte // Check if we are increasing the address MSB
+			
+			lda IDEBUFADDR+1
+			adc 1
+			sta IDEBUFADDR+1
+			ldy #$00
+
+WNByte:
+			// Write second word part
+			lda (IDEBUFADDR),Y // Load it
+			sta IDEportA // Low byte
+			iny
+			bne ENWrite
+			
+			lda IDEBUFADDR+1
+			adc 1
+			sta IDEBUFADDR+1
+			ldy #$00
+ENWrite:
+			// Set data register to read
+			lda REGdata
+			sta IDEportC
+
+			// Assert write line
+			ora #IDEwrline
+			sta IDEportC
+
+			// Deassert it
+			eor #IDEwrline
+			sta IDEportC
+
+			// Check if we have read the last word or not...
+			dex
+			bne BeginWrite
+
+			// Set the 8255 to input mode
+			lda	CFG8255_INPUT
+			sta IDEctrl
+
+			// Get read status... and check for ERROR in bit 0
+			lda REGstatus
+			jsr IDErd8D
+
+			and #$01
+			beq Done
+
+DoneError:
+			lda #$FF
+
+Done:
+			plp
+
+			rts
 				.)
 
 /* IDE set LBA address
