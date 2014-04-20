@@ -670,6 +670,7 @@ CONOUT1:
 
 // Get character from console
 CONIN:	.(
+		lda #%00000010
 		and CONSTATUS
 		beq CONIN
 		lda CONDATA
