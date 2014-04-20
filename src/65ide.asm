@@ -17,9 +17,9 @@
 #define IDEa2line		$04
 #define IDEcs0line		$08
 #define IDEcs1line		$10
-#define IDEwrline		#$20
-#define IDErdline		#$40
-#define IDErstline		#$80
+#define IDEwrline		$20
+#define IDErdline		$40
+#define IDErstline		$80
 
 #define REGdata			#$0 + IDEcs0line
 #define REGerr			#$0 + IDEcs0line + IDEa0line
@@ -74,6 +74,9 @@ CLEAR2:
 			nop
 			jsr IDEInit
 			nop
+
+			ldx	#>IDbuffer
+			ldy #<IDbuffer
 			jsr IDEGetID 
 
 			lda	#$2E
@@ -183,7 +186,7 @@ IDEReset:	.(
 			php
 
 			// Bring up the reset line
-			lda IDErstline
+			lda #IDErstline
 			sta IDEportC
 
 			// And loop for a while...
@@ -302,46 +305,75 @@ DoneReturn:
 			rts
 		.)
 
-/*
+/* IDE Get drive ID
+ * INVALIDATED REGISTERS:
+ *	- X,Y,A
  *
+ *  - Invalidates SCRATCH[0], SCRATCH[1]
+ * PARAMETERS:
+ *	- X: Memory destination address (MSB)
+ *  - Y: Memory destination address (LSB)
+ * RETURNS:
+ *  - A: Read result ($00: OK, $FF: KO)
  */
 IDEGetID .(
-			pha
+			// Save the registers
+			php
+
+			// Temporarly save the destination address on the stack
 			phx
 			phy
 
+			// Wait for the drive to be not busy
 			jsr IDEwaitnotbusy
 			and #$FF
 			bne DoneBusy
 
+			// Send ID command
 			ldx REGcommand
 			ldy COMMANDid
 			jsr IDEwr8D
 
+			// Wait for the drive to be ready for a data transfer...
 			jsr IDEwaitdrq
 			and #$FF
 			bne DoneBusyDrq
 
+			// Recover the destination address
+			ply
+			plx
+
 			// Read ID into IDbuffer...
-			ldx	#>IDbuffer
-			ldy #<IDbuffer
 			jsr IDErd16D	
-			
+			and #$FF
+			bne DoneReadError
+
+			// Return OK
+			lda #$00
+
 			bra Done
 			
 DoneBusyDrq:
-			jsr PRINT_BUSY_DRQ
+			// Return KO
+			lda #$FF
 			bra Done
+
 DoneBusy:
-			jsr PRINT_BUSY
+			// Return KO
+			lda #$FF
 			bra Done
+
+DoneReadError:
+			// Return KO
+			lda #$FF
+			bra Done
+
 Done:
 
 			jsr PRINT_DONE
 
-			ply
-			plx
-			pla
+			// Restore the registers
+			plp
 
 			rts
 		.)
@@ -374,7 +406,7 @@ BeginRead:
 			sta IDEportC
 
 			// Assert read line
-			ora IDErdline
+			ora #IDErdline
 			sta IDEportC
 		
 			// Load first word part
@@ -421,8 +453,6 @@ ENRead:
 			// Rewrite return value for error
 			ldx #$FF
 
-			jsr PRINT_ERRORRD16R
-
 End:
 			txa // Put the return address in A
 
@@ -431,7 +461,202 @@ End:
 			rts
 			.)
 
-IDEwr16D:	.(
+
+/* IDE read sector
+ * INVALIDATED REGISTERS:
+ *	- X,Y,A
+ *
+ * PARAMETERS:
+ *  - A: Sector number
+ *	- X: Track MSB
+ *  - Y: Track LSB
+ * RETURNS:
+ *	- A: $00 OK, $FF ERROR
+ */
+IDErdSector:	.(
+			php
+		
+			// Select the sector
+			jsr WRLBA
+
+			// Wait for disk not busy
+			jsr IDEwaitnotbusy
+			and #$FF
+			bne DoneError
+
+			// Send a read command
+			ldy REGcommand
+			ldx COMMANDread
+			jsr IDEwr8D
+
+			// Wait for the disk to be ready for transfer
+			jsr IDEwaitdrq
+			and #$FF
+			bne DoneError
+		
+			// Read the sector!
+			ldx #>IDEBUFADDR
+			ldy #<IDEBUFADDR
+			jsr IDErd16D
+
+			and #$FF
+			beq Done
+
+DoneError:
+			lda #$FF
+
+Done:
+			plp
+
+			rts
+			.)
+
+/* IDE write sector
+ * INVALIDATED REGISTERS:
+ *	- X,Y,A
+ *
+ * PARAMETERS:
+ *  - A: Sector number
+ *	- X: Track MSB
+ *  - Y: Track LSB
+ * RETURNS:
+ *	- A: $00 OK, $FF ERROR
+ */
+IDEwrSector:	.(
+			php
+	
+			// Write LBA data
+			jsr WRLBA
+
+			// Wait for disk not busy
+			jsr IDEwaitnotbusy
+			and #$FF
+			bne DoneError
+
+			// Send a write command
+			ldy REGcommand
+			ldx COMMANDwrite
+			jsr IDEwr8D
+
+			// Wait for the disk to be ready for transfer
+			jsr IDEwaitdrq
+			and #$FF
+			bne DoneError
+
+			// Set the 8255 to output mode
+			lda	CFG8255_OUTPUT
+			sta IDEctrl
+
+			// Prepare to write 256 words = 512 bytes
+			ldx #$00 // Trick: we decrement this before checking, so at first dex we get FF here...
+			ldy #$00
+
+BeginWrite:
+			// Store first word part
+			lda (IDEBUFADDR),Y // Load it
+			sta IDEportB // Save High byte
+			iny // Increase source address
+			bne	WNByte // Check if we are increasing the address MSB
+			
+			lda IDEBUFADDR+1
+			adc 1
+			sta IDEBUFADDR+1
+			ldy #$00
+
+WNByte:
+			// Write second word part
+			lda (IDEBUFADDR),Y // Load it
+			sta IDEportA // Low byte
+			iny
+			bne ENWrite
+			
+			lda IDEBUFADDR+1
+			adc 1
+			sta IDEBUFADDR+1
+			ldy #$00
+ENWrite:
+			// Set data register to read
+			lda REGdata
+			sta IDEportC
+
+			// Assert write line
+			ora #IDEwrline
+			sta IDEportC
+
+			// Deassert it
+			eor #IDEwrline
+			sta IDEportC
+
+			// Check if we have read the last word or not...
+			dex
+			bne BeginWrite
+
+			// Set the 8255 to input mode
+			lda	CFG8255_INPUT
+			sta IDEctrl
+
+			// Get read status... and check for ERROR in bit 0
+			lda REGstatus
+			jsr IDErd8D
+
+			and #$01
+			beq Done
+
+DoneError:
+			lda #$FF
+
+Done:
+			plp
+
+			rts
+				.)
+
+/* IDE set LBA address
+ * INVALIDATED REGISTERS:
+ *	- X,Y,A
+ *
+ * PARAMETERS:
+ *  - A: Sector number
+ *	- X: Track MSB
+ *  - Y: Track LSB
+ * RETURNS:
+ */
+WRLBA:		.(
+			php
+
+			// Clear carry
+			clc
+
+			// A contains the sector number
+			adc #$1 // Convert from 0 based numeration to 1 based (LBA)
+
+			// Save the track data on stack
+			phx
+			phy
+
+			tya // Move it to Y
+
+			// Send the sector (LBA5)
+			ldx REGsector
+			jsr IDEwr8D
+			
+			// Send cylinder LSB
+			ply
+			ldx REGcylinderLSB
+			jsr IDEwr8D
+
+			// Send cylinder MSB
+			ply
+			ldx REGcylinderMSB
+			jsr IDEwr8D
+
+			// Then set to read one sector
+			ldy #$01
+			ldx REGseccnt
+			jsr IDEwr8D
+
+			plp
+
 			rts
 			.)
 
@@ -455,7 +680,7 @@ IDErd8D:	.(
 			sta IDEportC
 		
 			// Set the read line high...
-			ora	IDErdline
+			ora	#IDErdline
 			sta IDEportC
 
 			// Read the output from drive
@@ -464,7 +689,7 @@ IDErd8D:	.(
 			phx
 	
 			// Set the read line low
-			eor	IDErdline
+			eor	#IDErdline
 			sta IDEportC
 		
 			// Clear the register
@@ -507,10 +732,10 @@ IDEwr8D:	.(
 			sta IDEportC
 
 			// Assert the write line
-			ora IDEwrline
+			ora #IDEwrline
 			sta IDEportC
 			// Then deassert it...
-			eor IDEwrline
+			eor #IDEwrline
 			sta IDEportC
 
 			// Deselect the register
@@ -553,83 +778,11 @@ PRINT_ERROR:	.(
 		rts
 		.)
 
-PRINT_ERRORRD16R:	.(
-		pha
-		lda	#<PERRORRD16
-		sta STR_POINTER
-		lda #>PERRORRD16
-		sta STR_POINTER+1
-		jsr PRINT_STRING
-		pla
-
-		rts
-		.)
-
 PRINT_DONE:	.(
 		pha
 		lda	#<PDONE
 		sta STR_POINTER
 		lda #>PDONE
-		sta STR_POINTER+1
-		jsr PRINT_STRING
-		pla
-
-		rts
-		.)
-
-PRINT_DEB01:	.(
-		pha
-		lda	#<PDEB01
-		sta STR_POINTER
-		lda #>PDEB01
-		sta STR_POINTER+1
-		jsr PRINT_STRING
-		pla
-
-		rts
-		.)
-
-PRINT_DEB02:	.(
-		pha
-		lda	#<PDEB02
-		sta STR_POINTER
-		lda #>PDEB02
-		sta STR_POINTER+1
-		jsr PRINT_STRING
-		pla
-
-		rts
-		.)
-
-PRINT_BUSY:	.(
-		pha
-		lda	#<PBUSY
-		sta STR_POINTER
-		lda #>PBUSY
-		sta STR_POINTER+1
-		jsr PRINT_STRING
-		pla
-
-		rts
-		.)
-
-PRINT_BREAD:	.(
-		pha
-		lda	#<PBREAD
-		sta STR_POINTER
-		lda #>PBREAD
-		sta STR_POINTER+1
-		jsr PRINT_STRING
-		pla
-
-		rts
-		.)
-
-PRINT_BUSY_DRQ:	.(
-		pha
-		lda	#<PBUSYDRQ
-		sta STR_POINTER
-		lda #>PBUSYDRQ
 		sta STR_POINTER+1
 		jsr PRINT_STRING
 		pla
