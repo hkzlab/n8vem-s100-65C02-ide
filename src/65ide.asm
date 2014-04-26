@@ -26,8 +26,8 @@
 #define REGerr			#$0 + IDEcs0line + IDEa0line
 #define REGseccnt		#$0 + IDEcs0line + IDEa1line
 #define REGsector		#$0 + IDEcs0line + IDEa1line + IDEa0line
-#define REGcylinderLSB	#$0 + IDEcs0line + IDEa2line
-#define REGcylinderMSB	#$0 + IDEcs0line + IDEa2line + IDEa0line
+#define REGCylLOW		#$0 + IDEcs0line + IDEa2line
+#define REGCylHIGH		#$0 + IDEcs0line + IDEa2line + IDEa0line
 #define REGshd			#$0 + IDEcs0line + IDEa2line + IDEa1line
 #define REGcommand		#$0 + IDEcs0line + IDEa2line + IDEa1line + IDEa0line
 #define REGstatus		#$0 + IDEcs0line + IDEa2line + IDEa1line + IDEa0line
@@ -44,21 +44,37 @@
 #define	COMMANDspinup	#$E1
 
 // Local variables
-#define	PREVIOUS_CHAR	$50
-#define STR_POINTER		$40
+#define ZERO_SCRATCH_BASE $40
+#define STR_POINTER		ZERO_SCRATCH_BASE + $0
+#define SCRATCH_POINTER	ZERO_SCRATCH_BASE + $2
+#define	PREVIOUS_CHAR	ZERO_SCRATCH_BASE + $4
 
 // Location memory which contains the start address (16 bit) of IDE sector buffer (256x16bit words = 512 bytes)
 #define IDE_SECTOR_BUFFER_ADDR	$80
 
-#define IDbuffer		$3000
+// Number of logical cylinders is in word 1
+#define IDE_IDENT_CYL_OFFSET $2
+// Number of logical heads is in word 3
+#define IDE_IDENT_HEAD_OFFSET $6
+// Number of logical sector per track is in word 6
+#define IDE_IDENT_SEC_OFFSET $C
+
+#define IDbuffer $3000
+
+#define IDE_DISKDATA_BASE IDbuffer + $200
+
+* = IDE_DISKDATA_BASE
+IDE_DISKDATA_CYLINDERS:	.word	$0000
+IDE_DISKDATA_HEADS:		.word	$0000
+IDE_DISKDATA_SECTORS:	.word	$0000
 
 * = $5000
 MAIN:	.(
 			sei			// Disable interrupts (Start Of ROM Code) 
 			ldx	#$FF	// Set stack pointer
-			txs			// to 0FFH 
+			txs			// to 0xFF (actualy 0x01FF, as high byte is always 1!)
 
-			lda	#0		// Clear RAM at 0000H (Useful for debugging only)
+			lda	#0		// Clear RAM at 0x0000 (Useful for debugging only)
 			tay			// Fill first page with 0's
 CLEAR2: 	
 			sta	$0000,Y		// Set pointer Y -> 0
@@ -75,7 +91,8 @@ CLEAR2:
 			// Print ID
 			ldx	#>IDbuffer
 			ldy #<IDbuffer
-			jsr IDEGetID 
+			jsr IDEGetID
+			jsr IDEExtractInfo
 
 			lda	#$2E
 			sta STR_POINTER
@@ -387,6 +404,56 @@ Done:
 			rts
 		.)
 
+/* IDE Extract information after reading drive ID
+ * and populate a data structure.
+ * Must be called on the address filled by IDEGetID
+ * INVALIDATED REGISTERS:
+ *	- X,Y
+ *
+ * PARAMETERS:
+ *	- X: IDE info source address (MSB)
+ *  - Y: IDE info source address (LSB)
+ * RETURNS:
+ */
+IDEExtractInfo:	.(
+				php
+				pha
+
+				// Save the address...
+				sty ZERO_SCRATCH_BASE + $0
+				stx ZERO_SCRATCH_BASE + $1
+
+				// Load cylinders
+				ldy IDE_IDENT_CYL_OFFSET
+				lda (ZERO_SCRATCH_BASE),y
+				// TODO Store...
+				ldy IDE_IDENT_CYL_OFFSET+$1
+				lda (ZERO_SCRATCH_BASE),y
+				// TODO Store...
+
+				// Load heads
+				ldy IDE_IDENT_HEAD_OFFSET
+				lda (ZERO_SCRATCH_BASE),y
+				// TODO Store...
+				ldy IDE_IDENT_HEAD_OFFSET+$1
+				lda (ZERO_SCRATCH_BASE),y
+				// TODO Store...
+
+				// Load sectors
+				ldy IDE_IDENT_SEC_OFFSET
+				lda (ZERO_SCRATCH_BASE),y
+				// TODO Store...
+				ldy IDE_IDENT_SEC_OFFSET+$1
+				lda (ZERO_SCRATCH_BASE),y
+				// TODO Store...
+
+
+				pla
+				plp
+
+				rts
+			.)
+
 /* IDE 16bit READ
  * INVALIDATED REGISTERS:
  *	- X,Y,A
@@ -476,8 +543,8 @@ End:
  *
  * PARAMETERS:
  *  - A: Sector number
- *	- X: Cylinder MSB
- *  - Y: Cylinder LSB
+ *	- X: Cylinder HIGH 
+ *  - Y: Cylinder LOW
  * RETURNS:
  *	- A: $00 OK, $FF ERROR
  */
@@ -525,8 +592,8 @@ Done:
  *
  * PARAMETERS:
  *  - A: Sector number
- *	- X: Cylinder MSB
- *  - Y: Cylinder LSB
+ *	- X: Cylinder HIGH
+ *  - Y: Cylinder LOW
  * RETURNS:
  *	- A: $00 OK, $FF ERROR
  */
@@ -625,9 +692,11 @@ Done:
  *
  * PARAMETERS:
  *  - A: Sector number
- *	- X: Cylinder MSB
- *  - Y: Cylinder LSB
+ *	- X: Cylinder HIGH
+ *  - Y: Cylinder LOW
  * RETURNS:
+ *
+ * WARNING: heads are ignored for now
  */
 IDESetLBA:		.(
 			php
@@ -650,12 +719,12 @@ IDESetLBA:		.(
 			
 			// Send cylinder LSB
 			ply
-			ldx REGcylinderLSB
+			ldx REGCylLOW
 			jsr IDEwr8D
 
 			// Send cylinder MSB
 			ply
-			ldx REGcylinderMSB
+			ldx REGCylHIGH
 			jsr IDEwr8D
 
 			// Then set to read one sector
