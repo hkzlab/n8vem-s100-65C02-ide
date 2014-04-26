@@ -72,9 +72,12 @@ CLEAR2:
 
 			jsr PRINT_TITLE
 			nop
+
+			; Init IDE
 			jsr IDEInit
 			nop
 
+			; Print ID
 			ldx	#>IDbuffer
 			ldy #<IDbuffer
 			jsr IDEGetID 
@@ -91,6 +94,18 @@ CLEAR2:
 			sta STR_POINTER+1
 			jsr PRINT_STRING
 
+			; Init IDE
+			jsr IDEInit
+			nop
+
+			; Try to read sector
+			ldx #$00
+			ldy #$01
+			lda #$01
+			jsr IDErdSector
+			nop
+
+			; Return to the monitor
 			jmp $F100
 		.)
 
@@ -476,25 +491,25 @@ End:
 IDErdSector:	.(
 			php
 		
-			// Select the sector
+			; Select the sector
 			jsr WRLBA
 
-			// Wait for disk not busy
+			; Wait for disk not busy
 			jsr IDEwaitnotbusy
 			and #$FF
 			bne DoneError
-
-			// Send a read command
-			ldy REGcommand
-			ldx COMMANDread
+			
+			; Send a read command
+			ldx REGcommand
+			ldy COMMANDread
 			jsr IDEwr8D
 
-			// Wait for the disk to be ready for transfer
+			; Wait for the disk to be ready for transfer
 			jsr IDEwaitdrq
 			and #$FF
 			bne DoneError
-		
-			// Read the sector!
+	
+			; Read the sector!
 			ldx #>IDEBUFADDR
 			ldy #<IDEBUFADDR
 			jsr IDErd16D
@@ -534,8 +549,8 @@ IDEwrSector:	.(
 			bne DoneError
 
 			// Send a write command
-			ldy REGcommand
-			ldx COMMANDwrite
+			ldx REGcommand
+			ldy COMMANDwrite
 			jsr IDEwr8D
 
 			// Wait for the disk to be ready for transfer
@@ -754,6 +769,18 @@ IDEwr8D:	.(
 			.)
 
 // ******* UTILITY FUNCTIONS *******
+PRINT_DEB:	.(
+		pha
+		lda	#<PDEB01
+		sta STR_POINTER
+		lda #>PDEB01
+		sta STR_POINTER+1
+		jsr PRINT_STRING
+		pla
+
+		rts
+		.)
+
 PRINT_TITLE:	.(
 		pha
 		lda	#<PTITLE
