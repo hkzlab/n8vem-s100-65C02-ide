@@ -476,8 +476,8 @@ End:
  *
  * PARAMETERS:
  *  - A: Sector number
- *	- X: Track MSB
- *  - Y: Track LSB
+ *	- X: Cylinder MSB
+ *  - Y: Cylinder LSB
  * RETURNS:
  *	- A: $00 OK, $FF ERROR
  */
@@ -485,7 +485,7 @@ IDErdSector:	.(
 			php
 		
 			// Select the sector
-			jsr WRLBA
+			jsr IDESetLBA
 
 			// Wait for disk not busy
 			jsr IDEwaitnotbusy
@@ -525,8 +525,8 @@ Done:
  *
  * PARAMETERS:
  *  - A: Sector number
- *	- X: Track MSB
- *  - Y: Track LSB
+ *	- X: Cylinder MSB
+ *  - Y: Cylinder LSB
  * RETURNS:
  *	- A: $00 OK, $FF ERROR
  */
@@ -534,7 +534,7 @@ IDEwrSector:	.(
 			php
 	
 			// Write LBA data
-			jsr WRLBA
+			jsr IDESetLBA
 
 			// Wait for disk not busy
 			jsr IDEwaitnotbusy
@@ -625,11 +625,11 @@ Done:
  *
  * PARAMETERS:
  *  - A: Sector number
- *	- X: Track MSB
- *  - Y: Track LSB
+ *	- X: Cylinder MSB
+ *  - Y: Cylinder LSB
  * RETURNS:
  */
-WRLBA:		.(
+IDESetLBA:		.(
 			php
 
 			// Clear carry
@@ -638,7 +638,7 @@ WRLBA:		.(
 			// A contains the sector number
 			adc #$1 // Convert from 0 based numeration to 1 based (LBA)
 
-			// Save the track data on stack
+			// Save the cylinder data on stack
 			phx
 			phy
 
