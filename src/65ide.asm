@@ -2,11 +2,11 @@
 #define CONDATA			IO+$01
 #define CONSTATUS		IO+$00
 
-/**** 8255 I/O modes ****/
+; 8255 I/O modes
 #define CFG8255_INPUT	#%10010010
 #define CFG8255_OUTPUT	#%10000000
 
-/**** IDE ****/
+; IDE
 #define IDEctrl			IO+$33
 #define IDEportA		IO+$30
 #define IDEportB		IO+$31
@@ -21,6 +21,7 @@
 #define IDErdline		$40
 #define IDErstline		$80
 
+// IDE Registers
 #define REGdata			#$0 + IDEcs0line
 #define REGerr			#$0 + IDEcs0line + IDEa0line
 #define REGseccnt		#$0 + IDEcs0line + IDEa1line
@@ -33,6 +34,7 @@
 #define REGcontrol		#$0 + IDEcs1line + IDEa2line + IDEa1line
 #define REGastatus		#$0 + IDEcs1line + IDEa2line + IDEa1line + IDEa0line
 
+// IDE Commands
 #define COMMANDrecal	#$10
 #define	COMMANDread		#$20
 #define COMMANDwrite	#$30
@@ -41,43 +43,36 @@
 #define COMMANDspindown	#$E0
 #define	COMMANDspinup	#$E1
 
-/************/
-
+// Local variables
 #define	PREVIOUS_CHAR	$50
 #define STR_POINTER		$40
 
-#define SCRATCH			$45	// Scratch value. Do not expect to keep the data across function calls
-
-#define SCRATCHA		$45
-#define SCRATCHB		SCRATCHA+1
-#define SCRATCHC		SCRATCHA+2
-#define SCRATCHD		SCRATCHA+3
-
-#define IDEBUFADDR		$80
+// Location memory which contains the start address (16 bit) of IDE sector buffer (256x16bit words = 512 bytes)
+#define IDE_SECTOR_BUFFER_ADDR	$80
 
 #define IDbuffer		$3000
 
 * = $5000
 MAIN:	.(
-			sei			;Disable interrupts (Note Start Of ROM Code) 
-			ldx	#$FF	;Set stack pointer
-			txs			;to 0FFH 
+			sei			// Disable interrupts (Start Of ROM Code) 
+			ldx	#$FF	// Set stack pointer
+			txs			// to 0FFH 
 
-			lda	#0		;Clear RAM at 0000H (Useful for debugging only)
-			tay			;Fill first page with 0's
+			lda	#0		// Clear RAM at 0000H (Useful for debugging only)
+			tay			// Fill first page with 0's
 CLEAR2: 	
-			sta	$0000,Y		;Set pointer Y -> 0
+			sta	$0000,Y		// Set pointer Y -> 0
 			iny
 			bne	CLEAR2
 
 			jsr PRINT_TITLE
 			nop
 
-			; Init IDE
+			// Init IDE
 			jsr IDEInit
 			nop
 
-			; Print ID
+			// Print ID
 			ldx	#>IDbuffer
 			ldy #<IDbuffer
 			jsr IDEGetID 
@@ -94,22 +89,22 @@ CLEAR2:
 			sta STR_POINTER+1
 			jsr PRINT_STRING
 
-			; Init IDE
+			// Init IDE
 			jsr IDEInit
 			nop
 
-			; Try to read sector
+			// Try to read sector
 			ldx #$00
 			ldy #$01
 			lda #$01
 			jsr IDErdSector
 			nop
 
-			; Return to the monitor
+			// Return to the monitor
 			jmp $F100
 		.)
 
-// ****** IDE ******
+// ****** CODE IDE ******
 
 /* IDE Drive initialization
  * INVALIDATED REGISTERS:
@@ -324,7 +319,6 @@ DoneReturn:
  * INVALIDATED REGISTERS:
  *	- X,Y,A
  *
- *  - Invalidates SCRATCH[0], SCRATCH[1]
  * PARAMETERS:
  *	- X: Memory destination address (MSB)
  *  - Y: Memory destination address (LSB)
@@ -397,7 +391,6 @@ Done:
  * INVALIDATED REGISTERS:
  *	- X,Y,A
  *
- *  - Invalidates SCRATCH[0], SCRATCH[1]
  * PARAMETERS:
  *	- X: Memory destination address (MSB)
  *  - Y: Memory destination address (LSB)
@@ -408,8 +401,8 @@ IDErd16D:	.(
 			php
 
 			// Save destination address for block buffer
-			sty IDEBUFADDR
-			stx IDEBUFADDR+1
+			sty IDE_SECTOR_BUFFER_ADDR
+			stx IDE_SECTOR_BUFFER_ADDR+1
 
 			// Prepare to read 256 words = 512 bytes
 			ldx #$00 // Trick: we decrement this before checking, so at first dex we get FF here...
@@ -426,25 +419,25 @@ BeginRead:
 		
 			// Load first word part
 			lda IDEportB // High byte
-			sta (IDEBUFADDR),Y // Save it
+			sta (IDE_SECTOR_BUFFER_ADDR),Y // Save it
 			iny // Increase destination address
 			bne	RNByte // Check if we are increasing the address MSB
 			
-			lda IDEBUFADDR+1
+			lda IDE_SECTOR_BUFFER_ADDR+1
 			adc 1
-			sta IDEBUFADDR+1
+			sta IDE_SECTOR_BUFFER_ADDR+1
 			ldy #$00
 
 RNByte:
 			// Load second word part
 			lda IDEportA // Low byte
-			sta (IDEBUFADDR),Y // Save it
+			sta (IDE_SECTOR_BUFFER_ADDR),Y // Save it
 			iny
 			bne ENRead
 			
-			lda IDEBUFADDR+1
+			lda IDE_SECTOR_BUFFER_ADDR+1
 			adc 1
-			sta IDEBUFADDR+1
+			sta IDE_SECTOR_BUFFER_ADDR+1
 			ldy #$00
 ENRead:
 			// Check if we have read the last word or not...
@@ -491,27 +484,27 @@ End:
 IDErdSector:	.(
 			php
 		
-			; Select the sector
+			// Select the sector
 			jsr WRLBA
 
-			; Wait for disk not busy
+			// Wait for disk not busy
 			jsr IDEwaitnotbusy
 			and #$FF
 			bne DoneError
 			
-			; Send a read command
+			// Send a read command
 			ldx REGcommand
 			ldy COMMANDread
 			jsr IDEwr8D
 
-			; Wait for the disk to be ready for transfer
+			// Wait for the disk to be ready for transfer
 			jsr IDEwaitdrq
 			and #$FF
 			bne DoneError
 	
-			; Read the sector!
-			ldx #>IDEBUFADDR
-			ldy #<IDEBUFADDR
+			// Read the sector!
+			ldx #>IDE_SECTOR_BUFFER_ADDR
+			ldy #<IDE_SECTOR_BUFFER_ADDR
 			jsr IDErd16D
 
 			and #$FF
@@ -568,26 +561,26 @@ IDEwrSector:	.(
 
 BeginWrite:
 			// Store first word part
-			lda (IDEBUFADDR),Y // Load it
+			lda (IDE_SECTOR_BUFFER_ADDR),Y // Load it
 			sta IDEportB // Save High byte
 			iny // Increase source address
 			bne	WNByte // Check if we are increasing the address MSB
 			
-			lda IDEBUFADDR+1
+			lda IDE_SECTOR_BUFFER_ADDR+1
 			adc 1
-			sta IDEBUFADDR+1
+			sta IDE_SECTOR_BUFFER_ADDR+1
 			ldy #$00
 
 WNByte:
 			// Write second word part
-			lda (IDEBUFADDR),Y // Load it
+			lda (IDE_SECTOR_BUFFER_ADDR),Y // Load it
 			sta IDEportA // Low byte
 			iny
 			bne ENWrite
 			
-			lda IDEBUFADDR+1
+			lda IDE_SECTOR_BUFFER_ADDR+1
 			adc 1
-			sta IDEBUFADDR+1
+			sta IDE_SECTOR_BUFFER_ADDR+1
 			ldy #$00
 ENWrite:
 			// Set data register to read
@@ -823,9 +816,9 @@ STR2:
 		cmp #0
 		beq STRING_DONE
 		jsr	CONOUT
-		inc STR_POINTER ; Increment LSB
+		inc STR_POINTER // Increment LSB
 		bne STR2
-		inc STR_POINTER+1 ; We need to increment MSB
+		inc STR_POINTER+1 // We need to increment MSB
 		jmp STR2
 STRING_DONE:
 		rts
