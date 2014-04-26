@@ -1,11 +1,15 @@
 AS = xa
 ASFLAGS = -v
 
-BINDIR = bin
-SRCDIR = src
+BIN_DIR=bin/
+SRC_DIR=src/
+DEST_DIR=~/
 
-$(BINDIR)/65ide:	$(SRCDIR)/65ide.asm
-	$(AS) $(ASFLAGS) $(SRCDIR)/65ide.asm -o $(BINDIR)/65ide
+$(BIN_DIR)/65ide: $(SRC_DIR)/65ide.asm
+	$(AS) $(ASFLAGS) $(SRC_DIR)/65ide.asm -o $(BIN_DIR)/65ide
 
 clean:
-	rm -rf $(BINDIR)/*
+	rm -rf $(BIN_DIR)/*
+
+install: $(BIN_DIR)/65ide
+	cp	$(BIN_DIR)/65ide $(DEST_DIR)
