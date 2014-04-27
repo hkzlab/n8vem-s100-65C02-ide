@@ -1,16 +1,12 @@
-#define IO				$F000
-#define CONDATA			IO+$01
-#define CONSTATUS		IO+$00
-
-; 8255 I/O modes
+// IDE 8255 I/O modes
 #define CFG8255_INPUT	#%10010010
 #define CFG8255_OUTPUT	#%10000000
 
-; IDE
-#define IDEctrl			IO+$33
-#define IDEportA		IO+$30
-#define IDEportB		IO+$31
-#define IDEportC		IO+$32
+// IDE
+#define IDEctrl			IO_BASE+$33
+#define IDEportA		IO_BASE+$30
+#define IDEportB		IO_BASE+$31
+#define IDEportC		IO_BASE+$32
 
 #define IDEa0line		$01
 #define IDEa1line		$02
@@ -43,85 +39,24 @@
 #define COMMANDspindown	#$E0
 #define	COMMANDspinup	#$E1
 
-// Local variables
-#define ZERO_SCRATCH_BASE $40
-#define STR_POINTER		ZERO_SCRATCH_BASE + $0
-#define SCRATCH_POINTER	ZERO_SCRATCH_BASE + $2
-#define	PREVIOUS_CHAR	ZERO_SCRATCH_BASE + $4
-
-// Location memory which contains the start address (16 bit) of IDE sector buffer (256x16bit words = 512 bytes)
-#define IDE_SECTOR_BUFFER_ADDR	$80
+// Defined elsewhere...
+//#define ZSF_IDE_BUFFADDR	$80
+//#define IDE_DDATA_CYLS IDE_SECTOR_BUFFER + IDE_SECTOR_BUFFER_SIZE + $00
+//#define IDE_DDATA_HEAD IDE_SECTOR_BUFFER + IDE_SECTOR_BUFFER_SIZE + $02
+//#define IDE_DDATA_SECT IDE_SECTOR_BUFFER + IDE_SECTOR_BUFFER_SIZE + $04
 
 // Number of logical cylinders is in word 1
-#define IDE_IDENT_CYL_OFFSET $2
+#define IDE_IDENT_CYL_OFFSET $02
 // Number of logical heads is in word 3
-#define IDE_IDENT_HEAD_OFFSET $6
+#define IDE_IDENT_HEAD_OFFSET $06
 // Number of logical sector per track is in word 6
-#define IDE_IDENT_SEC_OFFSET $C
+#define IDE_IDENT_SEC_OFFSET $0C
 
-#define IDbuffer $3000
-
-#define IDE_DISKDATA_BASE IDbuffer + $200
-
-* = IDE_DISKDATA_BASE
-IDE_DISKDATA_CYLINDERS:	.word	$0000
-IDE_DISKDATA_HEADS:		.word	$0000
-IDE_DISKDATA_SECTORS:	.word	$0000
-
-* = $5000
-MAIN:	.(
-			sei			// Disable interrupts (Start Of ROM Code) 
-			ldx	#$FF	// Set stack pointer
-			txs			// to 0xFF (actualy 0x01FF, as high byte is always 1!)
-
-			lda	#0		// Clear RAM at 0x0000 (Useful for debugging only)
-			tay			// Fill first page with 0's
-CLEAR2: 	
-			sta	$0000,Y		// Set pointer Y -> 0
-			iny
-			bne	CLEAR2
-
-			jsr PRINT_TITLE
-			nop
-
-			// Init IDE
-			jsr IDEInit
-			nop
-
-			// Print ID
-			ldx	#>IDbuffer
-			ldy #<IDbuffer
-			jsr IDEGetID
-			jsr IDEExtractInfo
-
-			lda	#$2E
-			sta STR_POINTER
-			lda #$30
-			sta STR_POINTER+1
-			jsr PRINT_STRING
-
-			lda	#$14
-			sta STR_POINTER
-			lda #$30
-			sta STR_POINTER+1
-			jsr PRINT_STRING
-
-			// Init IDE
-			jsr IDEInit
-			nop
-
-			// Try to read sector
-			ldx #$00
-			ldy #$01
-			lda #$01
-			jsr IDErdSector
-			nop
-
-			// Return to the monitor
-			jmp $F100
-		.)
-
-// ****** CODE IDE ******
+// Disk data structure
+#define IDE_DISKDATA_BASE_OFFSET $00
+#define IDE_DISKDATA_CYLINDERS IDE_DISKDATA_BASE_OFFSET + $00
+#define IDE_DISKDATA_HEADS IDE_DISKDATA_BASE_OFFSET + $02
+#define IDE_DISKDATA_SECTORS IDE_DISKDATA_BASE_OFFSET + $04
 
 /* IDE Drive initialization
  * INVALIDATED REGISTERS:
@@ -419,33 +354,34 @@ IDEExtractInfo:	.(
 				php
 				pha
 
-				// Save the address...
-				sty ZERO_SCRATCH_BASE + $0
-				stx ZERO_SCRATCH_BASE + $1
+				// Save the IDE buffer address (little endian)...
+				sty ZSC_BASE+$00
+				stx ZSC_BASE+$01
 
 				// Load cylinders
 				ldy IDE_IDENT_CYL_OFFSET
-				lda (ZERO_SCRATCH_BASE),y
-				// TODO Store...
-				ldy IDE_IDENT_CYL_OFFSET+$1
-				lda (ZERO_SCRATCH_BASE),y
-				// TODO Store...
+				lda (ZSC_BASE),y
+				sta	IDE_DDATA_CYLS
+				ldy IDE_IDENT_CYL_OFFSET+$01
+				lda (ZSC_BASE),y
+				sta	IDE_DDATA_CYLS+$01
 
 				// Load heads
 				ldy IDE_IDENT_HEAD_OFFSET
-				lda (ZERO_SCRATCH_BASE),y
-				// TODO Store...
-				ldy IDE_IDENT_HEAD_OFFSET+$1
-				lda (ZERO_SCRATCH_BASE),y
-				// TODO Store...
+				lda (ZSC_BASE),y
+				sta	IDE_DDATA_HEAD
+				ldy IDE_IDENT_HEAD_OFFSET+$01
+				lda (ZSC_BASE),y
+				sta	IDE_DDATA_HEAD+$01
 
 				// Load sectors
 				ldy IDE_IDENT_SEC_OFFSET
-				lda (ZERO_SCRATCH_BASE),y
-				// TODO Store...
-				ldy IDE_IDENT_SEC_OFFSET+$1
-				lda (ZERO_SCRATCH_BASE),y
-				// TODO Store...
+				lda (ZSC_BASE),y
+				sta	IDE_DDATA_SECT
+
+				// Should be always <= 255...
+				//ldy IDE_IDENT_SEC_OFFSET+$1
+				//lda (ZSC_BASE),y
 
 
 				pla
@@ -453,6 +389,7 @@ IDEExtractInfo:	.(
 
 				rts
 			.)
+
 
 /* IDE 16bit READ
  * INVALIDATED REGISTERS:
@@ -468,8 +405,8 @@ IDErd16D:	.(
 			php
 
 			// Save destination address for block buffer
-			sty IDE_SECTOR_BUFFER_ADDR
-			stx IDE_SECTOR_BUFFER_ADDR+1
+			sty ZSF_IDE_BUFFADDR
+			stx ZSF_IDE_BUFFADDR+1
 
 			// Prepare to read 256 words = 512 bytes
 			ldx #$00 // Trick: we decrement this before checking, so at first dex we get FF here...
@@ -486,25 +423,25 @@ BeginRead:
 		
 			// Load first word part
 			lda IDEportB // High byte
-			sta (IDE_SECTOR_BUFFER_ADDR),Y // Save it
+			sta (ZSF_IDE_BUFFADDR),Y // Save it
 			iny // Increase destination address
 			bne	RNByte // Check if we are increasing the address MSB
 			
-			lda IDE_SECTOR_BUFFER_ADDR+1
+			lda ZSF_IDE_BUFFADDR+1
 			adc 1
-			sta IDE_SECTOR_BUFFER_ADDR+1
+			sta ZSF_IDE_BUFFADDR+1
 			ldy #$00
 
 RNByte:
 			// Load second word part
 			lda IDEportA // Low byte
-			sta (IDE_SECTOR_BUFFER_ADDR),Y // Save it
+			sta (ZSF_IDE_BUFFADDR),Y // Save it
 			iny
 			bne ENRead
 			
-			lda IDE_SECTOR_BUFFER_ADDR+1
+			lda ZSF_IDE_BUFFADDR+1
 			adc 1
-			sta IDE_SECTOR_BUFFER_ADDR+1
+			sta ZSF_IDE_BUFFADDR+1
 			ldy #$00
 ENRead:
 			// Check if we have read the last word or not...
@@ -570,8 +507,8 @@ IDErdSector:	.(
 			bne DoneError
 	
 			// Read the sector!
-			ldx #>IDE_SECTOR_BUFFER_ADDR
-			ldy #<IDE_SECTOR_BUFFER_ADDR
+			ldx #>ZSF_IDE_BUFFADDR
+			ldy #<ZSF_IDE_BUFFADDR
 			jsr IDErd16D
 
 			and #$FF
@@ -628,26 +565,26 @@ IDEwrSector:	.(
 
 BeginWrite:
 			// Store first word part
-			lda (IDE_SECTOR_BUFFER_ADDR),Y // Load it
+			lda (ZSF_IDE_BUFFADDR),Y // Load it
 			sta IDEportB // Save High byte
 			iny // Increase source address
 			bne	WNByte // Check if we are increasing the address MSB
 			
-			lda IDE_SECTOR_BUFFER_ADDR+1
+			lda ZSF_IDE_BUFFADDR+1
 			adc 1
-			sta IDE_SECTOR_BUFFER_ADDR+1
+			sta ZSF_IDE_BUFFADDR+1
 			ldy #$00
 
 WNByte:
 			// Write second word part
-			lda (IDE_SECTOR_BUFFER_ADDR),Y // Load it
+			lda (ZSF_IDE_BUFFADDR),Y // Load it
 			sta IDEportA // Low byte
 			iny
 			bne ENWrite
 			
-			lda IDE_SECTOR_BUFFER_ADDR+1
+			lda ZSF_IDE_BUFFADDR+1
 			adc 1
-			sta IDE_SECTOR_BUFFER_ADDR+1
+			sta ZSF_IDE_BUFFADDR+1
 			ldy #$00
 ENWrite:
 			// Set data register to read
@@ -830,146 +767,3 @@ IDEwr8D:	.(
 			rts
 			.)
 
-// ******* UTILITY FUNCTIONS *******
-PRINT_DEB:	.(
-		pha
-		lda	#<PDEB01
-		sta STR_POINTER
-		lda #>PDEB01
-		sta STR_POINTER+1
-		jsr PRINT_STRING
-		pla
-
-		rts
-		.)
-
-PRINT_TITLE:	.(
-		pha
-		lda	#<PTITLE
-		sta STR_POINTER
-		lda #>PTITLE
-		sta STR_POINTER+1
-		jsr PRINT_STRING
-		pla
-
-		rts
-		.)
-
-PRINT_ERROR:	.(
-		pha
-		lda	#<PERROR
-		sta STR_POINTER
-		lda #>PERROR
-		sta STR_POINTER+1
-		jsr PRINT_STRING
-		pla
-
-		rts
-		.)
-
-PRINT_DONE:	.(
-		pha
-		lda	#<PDONE
-		sta STR_POINTER
-		lda #>PDONE
-		sta STR_POINTER+1
-		jsr PRINT_STRING
-		pla
-
-		rts
-		.)
-
-PRINT_STRING:	.(
-STR2:
-		lda (STR_POINTER)
-		cmp #0
-		beq STRING_DONE
-		jsr	CONOUT
-		inc STR_POINTER // Increment LSB
-		bne STR2
-		inc STR_POINTER+1 // We need to increment MSB
-		jmp STR2
-STRING_DONE:
-		rts
-		.)
-
-// ******* HARDWARE I/O *******
-
-//
-// Propeller I/O subroutines
-//
-// Print character to propeller console
-CONOUT:	.(
-		pha
-CONOUT1:
-		lda #%00000100
-		and CONSTATUS
-		beq CONOUT1
-		pla
-		sta CONDATA
-		rts
-		.)
-
-// Get character from console
-CONIN:	.(
-		lda #%00000010
-		and CONSTATUS
-		beq CONIN
-		lda CONDATA
-		sta PREVIOUS_CHAR
-		rts
-		.)
-
-///////
-DELAY:	.(
-		bra DELAYA
-DLY0:
-		sbc #7
-DELAYA:	
-		cmp #7
-		bcs	DLY0
-		lsr
-		bcs	DLY1
-DLY1:
-		beq	DLY2
-		lsr
-		beq	DLY3
-		bcc DLY3
-DLY2:
-		bne	DLY3
-DLY3:
-		rts
-		.)
-
-BIGDELAY:	.(
-		pha
-		phx
-		phy
-
-		lda	#$FF
-BDLOOP:
-		pha
-		lda #$FF
-		jsr DELAY
-		pla
-		dec
-		bne BDLOOP
-		
-		ply
-		plx
-		pla
-
-		rts
-		.)
-
-PTITLE:	.asc "IDE BOARD TESTER",$07,$07,$07,$07,$07,$0a,$0d,0
-PERROR:	.asc "ERROR",$07,$07,$0a,$0d,0
-PERRORRD16:	.asc "ERROR RD16",$07,$07,$0a,$0d,0
-PDONE:	.asc "DONE",$07,$07,$0a,$0d,0
-PBUSY:	.asc "IDE BUSY",$0a,$0d,0
-PBUSYDRQ:	.asc "IDE BUSY DRQ",$0a,$0d,0
-
-PBREAD:	.asc "BREAD",$0a,$0d,0
-
-PDEB01:	.asc "DEB01",$0a,$0d,0
-PDEB02:	.asc "DEB02",$0a,$0d,0

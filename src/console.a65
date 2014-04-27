@@ -1,0 +1,40 @@
+/* Console input/output code */
+
+#define CONDATA			IO_BASE+$01
+#define CONSTATUS		IO_BASE+$00
+
+/*
+ * Propeller I/O subroutines
+ */
+
+// Print character to propeller console
+CONOUT:	.(
+		php
+		pha
+CONLOOP:
+		lda #%00000100
+		and CONSTATUS
+		beq CONLOOP
+		
+		pla
+		sta CONDATA
+
+		plp
+	
+		rts
+		.)
+
+// Get character from console
+CONIN:	.(
+		php
+
+		lda #%00000010
+		and CONSTATUS
+		beq CONIN
+		lda CONDATA
+
+		plp
+		rts
+		.)
+
+

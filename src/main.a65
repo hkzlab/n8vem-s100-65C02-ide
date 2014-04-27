@@ -1,0 +1,195 @@
+// I/O memory base
+#define IO_BASE				$F000
+
+// Zero page areas
+
+// ZERO SAFE 
+#define ZSF_BASE $E0
+#define ZSF_SIZE $0F
+
+// Word
+#define ZSF_IDE_BUFFADDR ZSF_BASE + $00 
+
+// ZERO SCRATCH
+#define ZSC_BASE $F0
+#define ZSC_SIZE $0F 
+
+#define IDE_SECTOR_BUFFER $3000
+#define IDE_SECTOR_BUFFER_SIZE $200
+// Word
+#define IDE_DDATA_CYLS IDE_SECTOR_BUFFER + IDE_SECTOR_BUFFER_SIZE + $00
+#define IDE_DDATA_HEAD IDE_SECTOR_BUFFER + IDE_SECTOR_BUFFER_SIZE + $02
+#define IDE_DDATA_SECT IDE_SECTOR_BUFFER + IDE_SECTOR_BUFFER_SIZE + $04
+
+* = $5000
+MAIN:	.(
+			sei			// Disable interrupts (Start Of ROM Code) 
+			ldx	#$FF	// Set stack pointer
+			txs			// to 0xFF (actualy 0x01FF, as high byte is always 1!)
+
+			lda	#0		// Clear RAM at 0x0000 (Useful for debugging only)
+			tay			// Fill first page with 0's
+CLEAR2: 	
+			sta	$0000,Y		// Set pointer Y -> 0
+			iny
+			bne	CLEAR2
+
+			jsr PRINT_TITLE
+			nop
+
+			// Init IDE
+			jsr IDEInit
+			nop
+
+			// Print ID
+			ldx	#>IDE_SECTOR_BUFFER
+			ldy #<IDE_SECTOR_BUFFER
+			jsr IDEGetID
+			//jsr IDEExtractInfo
+
+			lda	#$2E
+			sta ZSC_BASE
+			lda #$30
+			sta ZSC_BASE+1
+			jsr PRINT_STRING
+
+			lda	#$14
+			sta ZSC_BASE
+			lda #$30
+			sta ZSC_BASE+1
+			jsr PRINT_STRING
+
+			// Init IDE
+			jsr IDEInit
+			nop
+
+			// Try to read sector
+			ldx #$00
+			ldy #$01
+			lda #$01
+			jsr IDErdSector
+			nop
+
+			// Return to the monitor
+			jmp $F100
+		.)
+
+#include "console.a65"
+#include "n8vem-ide.a65"
+
+// ******* UTILITY FUNCTIO_BASENS *******
+PRINT_DEB:	.(
+		pha
+		lda	#<PDEB01
+		sta ZSC_BASE
+		lda #>PDEB01
+		sta ZSC_BASE+1
+		jsr PRINT_STRING
+		pla
+
+		rts
+		.)
+
+PRINT_TITLE:	.(
+		pha
+		lda	#<PTITLE
+		sta ZSC_BASE
+		lda #>PTITLE
+		sta ZSC_BASE+1
+		jsr PRINT_STRING
+		pla
+
+		rts
+		.)
+
+PRINT_ERROR:	.(
+		pha
+		lda	#<PERROR
+		sta ZSC_BASE
+		lda #>PERROR
+		sta ZSC_BASE+1
+		jsr PRINT_STRING
+		pla
+
+		rts
+		.)
+
+PRINT_DONE:	.(
+		pha
+		lda	#<PDONE
+		sta ZSC_BASE
+		lda #>PDONE
+		sta ZSC_BASE+1
+		jsr PRINT_STRING
+		pla
+
+		rts
+		.)
+
+PRINT_STRING:	.(
+STR2:
+		lda (ZSC_BASE)
+		cmp #0
+		beq STRING_DONE
+		jsr	CONOUT
+		inc ZSC_BASE // Increment LSB
+		bne STR2
+		inc ZSC_BASE+1 // We need to increment MSB
+		jmp STR2
+STRING_DONE:
+		rts
+		.)
+
+///////
+DELAY:	.(
+		bra DELAYA
+DLY0:
+		sbc #7
+DELAYA:	
+		cmp #7
+		bcs	DLY0
+		lsr
+		bcs	DLY1
+DLY1:
+		beq	DLY2
+		lsr
+		beq	DLY3
+		bcc DLY3
+DLY2:
+		bne	DLY3
+DLY3:
+		rts
+		.)
+
+BIGDELAY:	.(
+		pha
+		phx
+		phy
+
+		lda	#$FF
+BDLOOP:
+		pha
+		lda #$FF
+		jsr DELAY
+		pla
+		dec
+		bne BDLOOP
+		
+		ply
+		plx
+		pla
+
+		rts
+		.)
+
+PTITLE:	.asc "IDE BOARD TESTER",$07,$07,$07,$07,$07,$0a,$0d,0
+PERROR:	.asc "ERROR",$07,$07,$0a,$0d,0
+PERRORRD16:	.asc "ERROR RD16",$07,$07,$0a,$0d,0
+PDONE:	.asc "DONE",$07,$07,$0a,$0d,0
+PBUSY:	.asc "IDE BUSY",$0a,$0d,0
+PBUSYDRQ:	.asc "IDE BUSY DRQ",$0a,$0d,0
+
+PBREAD:	.asc "BREAD",$0a,$0d,0
+
+PDEB01:	.asc "DEB01",$0a,$0d,0
+PDEB02:	.asc "DEB02",$0a,$0d,0
