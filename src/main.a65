@@ -7,9 +7,6 @@
 #define ZSF_BASE $E0
 #define ZSF_SIZE $0F
 
-// Word
-#define ZSF_IDE_BUFFADDR ZSF_BASE + $00 
-
 // ZERO SCRATCH
 #define ZSC_BASE $F0
 #define ZSC_SIZE $0F 
@@ -61,15 +58,15 @@ CLEAR2:
 			sta ZSC_BASE+1
 			jsr PRINT_STRING
 
-//			// Init IDE
-//			jsr IDEInit
-//			nop
+			// Init IDE
+			jsr IDEInit
+			nop
 
-//			// Try to read sector
-//			ldx #$00
-//			ldy #$01
-//			lda #$01
-//			jsr IDErdSector
+			// Try to read sector
+			ldx #$00
+			ldy #$01
+			lda #$05
+			jsr IDErdSector
 			nop
 
 			// Return to the monitor
@@ -79,7 +76,7 @@ CLEAR2:
 #include "console.a65"
 #include "n8vem-ide.a65"
 
-// ******* UTILITY FUNCTIO_BASENS *******
+// ******* UTILITY FUNCS *******
 PRINT_DEB:	.(
 		pha
 		lda	#<PDEB01

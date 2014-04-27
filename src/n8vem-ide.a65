@@ -47,7 +47,6 @@
 #define	COMMANDspinup	#$E1
 
 // Defined elsewhere...
-//#define ZSF_IDE_BUFFADDR	$80
 //#define IDE_DDATA_CYLS IDE_SECTOR_BUFFER + IDE_SECTOR_BUFFER_SIZE + $00
 //#define IDE_DDATA_HEAD IDE_SECTOR_BUFFER + IDE_SECTOR_BUFFER_SIZE + $02
 //#define IDE_DDATA_SECT IDE_SECTOR_BUFFER + IDE_SECTOR_BUFFER_SIZE + $04
@@ -64,6 +63,9 @@
 #define IDE_DISKDATA_CYLINDERS IDE_DISKDATA_BASE_OFFSET + $00
 #define IDE_DISKDATA_HEADS IDE_DISKDATA_BASE_OFFSET + $02
 #define IDE_DISKDATA_SECTORS IDE_DISKDATA_BASE_OFFSET + $04
+
+#define ZSC_IDE_BUFFADDR ZSC_BASE
+
 
 /* IDE Drive initialization
  * INVALIDATED REGISTERS:
@@ -405,9 +407,11 @@ IDEExtractInfo:	.(
 IDErd16D:	.(
 			php
 
+			clc
+
 			// Save destination address for block buffer
-			sty ZSF_IDE_BUFFADDR
-			stx ZSF_IDE_BUFFADDR+1
+			sty ZSC_IDE_BUFFADDR
+			stx ZSC_IDE_BUFFADDR+1
 
 			// Prepare to read 256 words = 512 bytes
 			ldx #$00 // Trick: we decrement this before checking, so at first dex we get FF here...
@@ -424,25 +428,25 @@ BeginRead:
 		
 			// Load first word part
 			lda IDEportB // High byte
-			sta (ZSF_IDE_BUFFADDR),Y // Save it
+			sta (ZSC_IDE_BUFFADDR),Y // Save it
 			iny // Increase destination address
 			bne	RNByte // Check if we are increasing the address MSB
 			
-			lda ZSF_IDE_BUFFADDR+1
-			adc 1
-			sta ZSF_IDE_BUFFADDR+1
+			lda ZSC_IDE_BUFFADDR+1
+			adc #1
+			sta ZSC_IDE_BUFFADDR+1
 			ldy #$00
 
 RNByte:
 			// Load second word part
 			lda IDEportA // Low byte
-			sta (ZSF_IDE_BUFFADDR),Y // Save it
+			sta (ZSC_IDE_BUFFADDR),Y // Save it
 			iny
 			bne ENRead
 			
-			lda ZSF_IDE_BUFFADDR+1
-			adc 1
-			sta ZSF_IDE_BUFFADDR+1
+			lda ZSC_IDE_BUFFADDR+1
+			adc #$1
+			sta ZSC_IDE_BUFFADDR+1
 			ldy #$00
 ENRead:
 			// Check if we have read the last word or not...
@@ -489,8 +493,14 @@ End:
 IDErdSector:	.(
 			php
 		
-			// Select the sector
-			jsr IDESetLBA
+			// Send LBA data
+			// push the parameters
+			pha // Sector
+			lda #SHD_REG_Config
+			pha // SHD
+			phy // Cyl LOW
+			phx // Cyl HIGH
+			jsr IDESetLBA_P
 
 			// Wait for disk not busy
 			jsr IDEwaitnotbusy
@@ -508,8 +518,8 @@ IDErdSector:	.(
 			bne DoneError
 	
 			// Read the sector!
-			ldx #>ZSF_IDE_BUFFADDR
-			ldy #<ZSF_IDE_BUFFADDR
+			ldx	#>IDE_SECTOR_BUFFER
+			ldy #<IDE_SECTOR_BUFFER
 			jsr IDErd16D
 
 			and #$FF
@@ -537,9 +547,17 @@ Done:
  */
 IDEwrSector:	.(
 			php
-	
-			// Write LBA data
-			jsr IDESetLBA
+
+			clc
+
+			// Set LBA data
+			// push the parameters
+			pha // Sector
+			lda #SHD_REG_Config
+			pha // SHD
+			phy // Cyl LOW
+			phx // Cyl HIGH
+			jsr IDESetLBA_P
 
 			// Wait for disk not busy
 			jsr IDEwaitnotbusy
@@ -560,32 +578,38 @@ IDEwrSector:	.(
 			lda	CFG8255_OUTPUT
 			sta IDEctrl
 
+			// Prepare the address
+			ldx	#>IDE_SECTOR_BUFFER
+			ldy #<IDE_SECTOR_BUFFER
+			stx ZSC_IDE_BUFFADDR+1
+			sty ZSC_IDE_BUFFADDR
+
 			// Prepare to write 256 words = 512 bytes
 			ldx #$00 // Trick: we decrement this before checking, so at first dex we get FF here...
 			ldy #$00
 
 BeginWrite:
 			// Store first word part
-			lda (ZSF_IDE_BUFFADDR),Y // Load it
+			lda (ZSC_IDE_BUFFADDR),Y // Load it
 			sta IDEportB // Save High byte
 			iny // Increase source address
 			bne	WNByte // Check if we are increasing the address MSB
 			
-			lda ZSF_IDE_BUFFADDR+1
-			adc 1
-			sta ZSF_IDE_BUFFADDR+1
+			lda ZSC_IDE_BUFFADDR+1
+			adc #$1
+			sta ZSC_IDE_BUFFADDR+1
 			ldy #$00
 
 WNByte:
 			// Write second word part
-			lda (ZSF_IDE_BUFFADDR),Y // Load it
+			lda (ZSC_IDE_BUFFADDR),Y // Load it
 			sta IDEportA // Low byte
 			iny
 			bne ENWrite
 			
-			lda ZSF_IDE_BUFFADDR+1
-			adc 1
-			sta ZSF_IDE_BUFFADDR+1
+			lda ZSC_IDE_BUFFADDR+1
+			adc #$1
+			sta ZSC_IDE_BUFFADDR+1
 			ldy #$00
 ENWrite:
 			// Set data register to read
@@ -626,6 +650,76 @@ Done:
 
 /* IDE set LBA address
  * INVALIDATED REGISTERS:
+ *  - X,A,PSTATUS
+ * PARAMETERS: (0 is the first to be pushed)
+ *  - STACK[0]: Sector number
+ *	- STACK[1]: Heads
+ *  - STACK[2]: Cylinder LOW
+ *	- STACK[3]: Cylinder HIGH
+ * RETURNS:
+ * WARNING: heads are ignored for now
+ */
+IDESetLBA_P:	.(
+			// +2 return address
+			phy // +1
+
+			clc
+
+			// Send the sector
+			tsx
+			lda $107,x // Read sector number
+			adc $1 // Convert from 0 based numeration to 1 based (LBA)
+			tay
+			ldx REGsector
+			jsr IDEwr8D
+
+			// Send SHD
+			tsx
+			lda $106,x // Read SHD value
+			ora SHD_REG_Config
+			tay
+			ldx REGshd
+			jsr IDEwr8D
+
+			// Send Cylinder LOW
+			tsx
+			lda $105,x // Read SHD value
+			tay
+			ldx REGCylLOW
+			jsr IDEwr8D
+			
+			// Send Cylinder HIGH
+			tsx
+			lda $104,x // Read SHD value
+			tay
+			ldx REGCylHIGH
+			jsr IDEwr8D
+			
+			// Then set to read one sector
+			ldy #$01
+			ldx REGseccnt
+			jsr IDEwr8D
+
+			ply
+
+			// Restore the stack pointer
+			tsx
+			lda $101,x // Read the return address LSB
+			sta $105,x // Relocate it
+			lda $102,x // Same for MSB
+			sta $106,x
+
+			clc
+			txa
+			adc #$04 // relocate the stack pointer
+			tax
+			txs
+
+			rts
+			.)
+
+/* IDE set LBA address
+ * INVALIDATED REGISTERS:
  *	- X,Y,A
  *
  * PARAMETERS:
@@ -649,7 +743,7 @@ IDESetLBA:		.(
 			phx
 			phy
 
-			tya // Move it to Y
+			tay // Move it to Y
 			// Send the sector (LBA5)
 			ldx REGsector
 			jsr IDEwr8D
