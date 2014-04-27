@@ -35,6 +35,7 @@
 // DEV -> Device select
 // hea -> Head number
 // obs | LBA | obs | DEV | hea | hea | hea | hea 
+#define SHD_REG_Config %11100000
 
 // IDE Commands
 #define COMMANDrecal	#$10
@@ -98,7 +99,7 @@ IDEInit:	.(
 			// Data for IDE SHD reg (512bytes, LBA mode,single drive,head 0000)
 			// For Trk,Sec,head (non LBA) use 10100000
 			ldx REGshd
-			ldy #%11100000
+			ldy #SHD_REG_Config
 			jsr IDEwr8D // Send the command
 
 			// Check we're ready (255 tries)
@@ -649,11 +650,15 @@ IDESetLBA:		.(
 			phy
 
 			tya // Move it to Y
-
 			// Send the sector (LBA5)
 			ldx REGsector
 			jsr IDEwr8D
-			
+
+			// Send default SHD configuration...
+			ldx REGshd
+			ldy SHD_REG_Config
+			jsr IDEwr8D 
+
 			// Send cylinder LSB
 			ply
 			ldx REGCylLOW
