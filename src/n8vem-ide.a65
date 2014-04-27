@@ -190,6 +190,8 @@ IDEwaitnotbusy:	.(
 			phx
 			php
 
+			clc
+
 			// Prepare the high counter
 			ldx #$FF
 
@@ -478,6 +480,65 @@ End:
 			rts
 			.)
 
+IDErdSector_P:	.(
+			php
+
+			tsx
+			lda $107,x // Sector
+			pha
+			lda $106,x // SHD
+			pha
+			lda $105,x // Cyl-LSB
+			pha
+			lda $104,x // Cyl-MSB
+			pha 
+			jsr IDESetLBA
+
+			// Wait for disk not busy
+			jsr IDEwaitnotbusy
+			and #$FF
+			bne DoneError
+			
+			// Send a read command
+			ldx REGcommand
+			ldy COMMANDread
+			jsr IDEwr8D
+
+			// Wait for the disk to be ready for transfer
+			jsr IDEwaitdrq
+			and #$FF
+			bne DoneError
+	
+			// Read the sector!
+			ldx	#>IDE_SECTOR_BUFFER
+			ldy #<IDE_SECTOR_BUFFER
+			jsr IDErd16D
+
+			and #$FF
+			beq Done
+
+DoneError:
+			lda #$FF
+
+Done:
+			plp
+
+FixSP:
+			// Restore the stack pointer
+			tsx
+			lda $101,x // Read the return address LSB
+			sta $105,x // Relocate it
+			lda $102,x // Same for MSB...
+			sta $106,x
+
+			clc
+			txa
+			adc #$04 // Relocate the stack pointer
+			tax
+			txs
+
+			rts
+			.)
 
 /* IDE read sector
  * INVALIDATED REGISTERS:
@@ -500,7 +561,7 @@ IDErdSector:	.(
 			pha // SHD
 			phy // Cyl LOW
 			phx // Cyl HIGH
-			jsr IDESetLBA_P
+			jsr IDESetLBA
 
 			// Wait for disk not busy
 			jsr IDEwaitnotbusy
@@ -557,7 +618,7 @@ IDEwrSector:	.(
 			pha // SHD
 			phy // Cyl LOW
 			phx // Cyl HIGH
-			jsr IDESetLBA_P
+			jsr IDESetLBA
 
 			// Wait for disk not busy
 			jsr IDEwaitnotbusy
@@ -659,16 +720,15 @@ Done:
  * RETURNS:
  * WARNING: heads are ignored for now
  */
-IDESetLBA_P:	.(
-			// +2 return address
-			phy // +1
+IDESetLBA:	.(
+			phy 
 
 			clc
 
 			// Send the sector
 			tsx
 			lda $107,x // Read sector number
-			adc $1 // Convert from 0 based numeration to 1 based (LBA)
+			adc #$1 // Convert from 0 based numeration to 1 based (LBA)
 			tay
 			ldx REGsector
 			jsr IDEwr8D
@@ -702,73 +762,19 @@ IDESetLBA_P:	.(
 
 			ply
 
+FixSP:
 			// Restore the stack pointer
 			tsx
 			lda $101,x // Read the return address LSB
 			sta $105,x // Relocate it
-			lda $102,x // Same for MSB
+			lda $102,x // Same for MSB...
 			sta $106,x
 
 			clc
 			txa
-			adc #$04 // relocate the stack pointer
+			adc #$04 // Relocate the stack pointer
 			tax
 			txs
-
-			rts
-			.)
-
-/* IDE set LBA address
- * INVALIDATED REGISTERS:
- *	- X,Y,A
- *
- * PARAMETERS:
- *  - A: Sector number
- *	- X: Cylinder HIGH
- *  - Y: Cylinder LOW
- * RETURNS:
- *
- * WARNING: heads are ignored for now
- */
-IDESetLBA:		.(
-			php
-
-			// Clear carry
-			clc
-
-			// A contains the sector number
-			adc #$1 // Convert from 0 based numeration to 1 based (LBA)
-
-			// Save the cylinder data on stack
-			phx
-			phy
-
-			tay // Move it to Y
-			// Send the sector (LBA5)
-			ldx REGsector
-			jsr IDEwr8D
-
-			// Send default SHD configuration...
-			ldx REGshd
-			ldy SHD_REG_Config
-			jsr IDEwr8D 
-
-			// Send cylinder LSB
-			ply
-			ldx REGCylLOW
-			jsr IDEwr8D
-
-			// Send cylinder MSB
-			ply
-			ldx REGCylHIGH
-			jsr IDEwr8D
-
-			// Then set to read one sector
-			ldy #$01
-			ldx REGseccnt
-			jsr IDEwr8D
-
-			plp
 
 			rts
 			.)

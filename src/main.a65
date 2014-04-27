@@ -63,9 +63,9 @@ CLEAR2:
 			nop
 
 			// Try to read sector
-			ldx #$00
-			ldy #$01
-			lda #$05
+			ldx #$01
+			ldy #$11
+			lda #$15
 			jsr IDErdSector
 			nop
 
