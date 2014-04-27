@@ -73,7 +73,7 @@ CLEAR2:
 			nop
 
 			// Try to read sector
-			lda #$01
+			lda #$00
 			sta IDE_PARAM_CYLS+$01
 			lda #$11
 			sta IDE_PARAM_CYLS
@@ -81,8 +81,20 @@ CLEAR2:
 			sta IDE_PARAM_HEAD
 			lda #$15
 			sta IDE_PARAM_SECT
+			
+TLOOP:
+			ldx IDE_PARAM_SECT
+			phx
+
 			jsr IDEwrSector_P
 			jsr IDErdSector_P
+			
+			plx
+			dex 
+			stx IDE_PARAM_SECT
+			bne TLOOP
+
+			jsr IDEReset
 
 			// Return to the monitor
 			jmp $F100
