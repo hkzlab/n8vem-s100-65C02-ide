@@ -13,10 +13,20 @@
 
 #define IDE_SECTOR_BUFFER $3000
 #define IDE_SECTOR_BUFFER_SIZE $200
+
+// Disk details read with ID command
 // Word
 #define IDE_DDATA_CYLS IDE_SECTOR_BUFFER + IDE_SECTOR_BUFFER_SIZE + $00
+// Byte
 #define IDE_DDATA_HEAD IDE_SECTOR_BUFFER + IDE_SECTOR_BUFFER_SIZE + $02
+// Byte
 #define IDE_DDATA_SECT IDE_SECTOR_BUFFER + IDE_SECTOR_BUFFER_SIZE + $03
+
+#define IDE_PARAM_CYLS IDE_SECTOR_BUFFER + IDE_SECTOR_BUFFER_SIZE + $04
+#define IDE_PARAM_HEAD IDE_SECTOR_BUFFER + IDE_SECTOR_BUFFER_SIZE + $06
+#define IDE_PARAM_SECT IDE_SECTOR_BUFFER + IDE_SECTOR_BUFFER_SIZE + $07
+
+
 
 * = $5000
 MAIN:	.(
@@ -63,11 +73,16 @@ CLEAR2:
 			nop
 
 			// Try to read sector
-			ldx #$01
-			ldy #$11
+			lda #$01
+			sta IDE_PARAM_CYLS+$01
+			lda #$11
+			sta IDE_PARAM_CYLS
+			lda #$00
+			sta IDE_PARAM_HEAD
 			lda #$15
-			jsr IDErdSector
-			nop
+			sta IDE_PARAM_SECT
+			jsr IDEwrSector_P
+			jsr IDErdSector_P
 
 			// Return to the monitor
 			jmp $F100

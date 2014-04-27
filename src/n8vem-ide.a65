@@ -480,18 +480,33 @@ End:
 			rts
 			.)
 
+/* IDE read sector
+ * INVALIDATED REGISTERS:
+ *	- X,Y,A
+ *
+ * PARAMETERS:
+ * Must be written into
+ * IDE_PARAM_SECT
+ * IDE_PARAM_HEAD
+ * IDE_PARAM_CYLS
+ * RETURNS:
+ *	- A: $00 OK, $FF ERROR
+ */
 IDErdSector_P:	.(
 			php
+	
+			clc
 
-			tsx
-			lda $107,x // Sector
+			// Set LBA data
+			// push the parameters
+			lda IDE_PARAM_SECT
 			pha
-			lda $106,x // SHD
+			lda IDE_PARAM_HEAD
 			pha
-			lda $105,x // Cyl-LSB
-			pha
-			lda $104,x // Cyl-MSB
-			pha 
+			lda IDE_PARAM_CYLS
+			pha // Cyl LOW
+			lda IDE_PARAM_CYLS+$1
+			pha // Cyl HIGH 
 			jsr IDESetLBA
 
 			// Wait for disk not busy
@@ -523,22 +538,9 @@ DoneError:
 Done:
 			plp
 
-FixSP:
-			// Restore the stack pointer
-			tsx
-			lda $101,x // Read the return address LSB
-			sta $105,x // Relocate it
-			lda $102,x // Same for MSB...
-			sta $106,x
-
-			clc
-			txa
-			adc #$04 // Relocate the stack pointer
-			tax
-			txs
-
 			rts
 			.)
+
 
 /* IDE read sector
  * INVALIDATED REGISTERS:
@@ -551,6 +553,7 @@ FixSP:
  * RETURNS:
  *	- A: $00 OK, $FF ERROR
  */
+#if 0
 IDErdSector:	.(
 			php
 		
@@ -594,18 +597,21 @@ Done:
 
 			rts
 			.)
+#endif
 
 /* IDE write sector
  * INVALIDATED REGISTERS:
  *	- X,Y,A
  *
  * PARAMETERS:
- *  - A: Sector number
- *	- X: Cylinder HIGH
- *  - Y: Cylinder LOW
+ * Must be written into
+ * IDE_PARAM_SECT
+ * IDE_PARAM_HEAD
+ * IDE_PARAM_CYLS
  * RETURNS:
  *	- A: $00 OK, $FF ERROR
  */
+#if 0
 IDEwrSector:	.(
 			php
 
@@ -708,6 +714,125 @@ Done:
 
 			rts
 				.)
+#endif
+
+/* IDE write sector
+ * INVALIDATED REGISTERS:
+ *	- X,Y,A
+ *
+ * PARAMETERS:
+ *  - A: Sector number
+ *	- X: Cylinder HIGH
+ *  - Y: Cylinder LOW
+ * RETURNS:
+ *	- A: $00 OK, $FF ERROR
+ */
+IDEwrSector_P:	.(
+			php
+
+			clc
+
+			// Set LBA data
+			// push the parameters
+			lda IDE_PARAM_SECT
+			pha
+			lda IDE_PARAM_HEAD
+			pha
+			lda IDE_PARAM_CYLS
+			pha // Cyl LOW
+			lda IDE_PARAM_CYLS+$1
+			pha // Cyl HIGH 
+			jsr IDESetLBA
+
+			// Wait for disk not busy
+			jsr IDEwaitnotbusy
+			and #$FF
+			bne DoneError
+
+			// Send a write command
+			ldx REGcommand
+			ldy COMMANDwrite
+			jsr IDEwr8D
+
+			// Wait for the disk to be ready for transfer
+			jsr IDEwaitdrq
+			and #$FF
+			bne DoneError
+
+			// Set the 8255 to output mode
+			lda	CFG8255_OUTPUT
+			sta IDEctrl
+
+			// Prepare the address
+			ldx	#>IDE_SECTOR_BUFFER
+			ldy #<IDE_SECTOR_BUFFER
+			stx ZSC_IDE_BUFFADDR+1
+			sty ZSC_IDE_BUFFADDR
+
+			// Prepare to write 256 words = 512 bytes
+			ldx #$00 // Trick: we decrement this before checking, so at first dex we get FF here...
+			ldy #$00
+
+BeginWrite:
+			// Store first word part
+			lda (ZSC_IDE_BUFFADDR),Y // Load it
+			sta IDEportB // Save High byte
+			iny // Increase source address
+			bne	WNByte // Check if we are increasing the address MSB
+			
+			lda ZSC_IDE_BUFFADDR+1
+			adc #$1
+			sta ZSC_IDE_BUFFADDR+1
+			ldy #$00
+
+WNByte:
+			// Write second word part
+			lda (ZSC_IDE_BUFFADDR),Y // Load it
+			sta IDEportA // Low byte
+			iny
+			bne ENWrite
+			
+			lda ZSC_IDE_BUFFADDR+1
+			adc #$1
+			sta ZSC_IDE_BUFFADDR+1
+			ldy #$00
+ENWrite:
+			// Set data register to read
+			lda REGdata
+			sta IDEportC
+
+			// Assert write line
+			ora #IDEwrline
+			sta IDEportC
+
+			// Deassert it
+			eor #IDEwrline
+			sta IDEportC
+
+			// Check if we have read the last word or not...
+			dex
+			bne BeginWrite
+
+			// Set the 8255 to input mode
+			lda	CFG8255_INPUT
+			sta IDEctrl
+
+			// Get read status... and check for ERROR in bit 0
+			lda REGstatus
+			jsr IDErd8D
+
+			and #$01
+			beq Done
+
+DoneError:
+			lda #$FF
+
+Done:
+			plp
+
+			rts
+				.)
+
 
 /* IDE set LBA address
  * INVALIDATED REGISTERS:
