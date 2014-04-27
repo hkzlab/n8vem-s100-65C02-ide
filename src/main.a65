@@ -19,7 +19,7 @@
 // Word
 #define IDE_DDATA_CYLS IDE_SECTOR_BUFFER + IDE_SECTOR_BUFFER_SIZE + $00
 #define IDE_DDATA_HEAD IDE_SECTOR_BUFFER + IDE_SECTOR_BUFFER_SIZE + $02
-#define IDE_DDATA_SECT IDE_SECTOR_BUFFER + IDE_SECTOR_BUFFER_SIZE + $04
+#define IDE_DDATA_SECT IDE_SECTOR_BUFFER + IDE_SECTOR_BUFFER_SIZE + $03
 
 * = $5000
 MAIN:	.(
@@ -45,7 +45,9 @@ CLEAR2:
 			ldx	#>IDE_SECTOR_BUFFER
 			ldy #<IDE_SECTOR_BUFFER
 			jsr IDEGetID
-			//jsr IDEExtractInfo
+			ldx	#>IDE_SECTOR_BUFFER
+			ldy #<IDE_SECTOR_BUFFER
+			jsr IDEExtractInfo
 
 			lda	#$2E
 			sta ZSC_BASE
@@ -59,15 +61,15 @@ CLEAR2:
 			sta ZSC_BASE+1
 			jsr PRINT_STRING
 
-			// Init IDE
-			jsr IDEInit
-			nop
+//			// Init IDE
+//			jsr IDEInit
+//			nop
 
-			// Try to read sector
-			ldx #$00
-			ldy #$01
-			lda #$01
-			jsr IDErdSector
+//			// Try to read sector
+//			ldx #$00
+//			ldy #$01
+//			lda #$01
+//			jsr IDErdSector
 			nop
 
 			// Return to the monitor
