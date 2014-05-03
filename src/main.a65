@@ -72,28 +72,53 @@ CLEAR2:
 			jsr IDEInit
 			nop
 
-			// Try to read sector
-			lda #$00
+			lda IDE_DDATA_CYLS+$01
 			sta IDE_PARAM_CYLS+$01
-			lda #$11
-			sta IDE_PARAM_CYLS
-			lda #$00
+			lda IDE_DDATA_CYLS+$00
+			sta IDE_PARAM_CYLS+$00
+			lda IDE_DDATA_HEAD
 			sta IDE_PARAM_HEAD
-			lda #$15
+			lda IDE_DDATA_SECT
 			sta IDE_PARAM_SECT
-			
-TLOOP:
-			ldx IDE_PARAM_SECT
-			phx
 
-			jsr IDEwrSector_P
-			jsr IDErdSector_P
-			
-			plx
-			dex 
-			stx IDE_PARAM_SECT
-			bne TLOOP
+CYL_LOOP:
+HEAD_LOOP:
+SECT_LOOP:
+			jsr IDEwrSector
 
+			lda IDE_PARAM_SECT
+			bne SECT_LOOP_REP
+			lda IDE_DDATA_SECT
+			sta IDE_PARAM_SECT
+			bra SECT_LOOP_END
+SECT_LOOP_REP:
+			dec SECT_LOOP_REP
+			bra SECT_LOOP
+SECT_LOOP_END:
+
+			lda IDE_PARAM_HEAD
+			bne HEAD_LOOP_REP
+			lda IDE_DDATA_HEAD
+			sta IDE_PARAM_HEAD
+			bra HEAD_LOOP_END
+HEAD_LOOP_REP:
+			dec HEAD_LOOP_REP
+			bra HEAD_LOOP
+HEAD_LOOP_END:
+		
+			lda IDE_PARAM_CYLS+$01
+			bne CYL_LOOP_REP
+			lda IDE_PARAM_CYLS+$00
+			beq LOOP_END
+			dec IDE_PARAM_CYLS+$00
+			lda IDE_DDATA_CYLS+$01
+			sta IDE_PARAM_CYLS+$01
+			bra CYL_LOOP
+CYL_LOOP_REP:
+			dec IDE_PARAM_CYLS+$01
+			bra CYL_LOOP
+LOOP_END:
+			
 			jsr IDEReset
 
 			// Return to the monitor

@@ -480,33 +480,29 @@ End:
 			rts
 			.)
 
+
 /* IDE read sector
  * INVALIDATED REGISTERS:
  *	- X,Y,A
  *
  * PARAMETERS:
- * Must be written into
- * IDE_PARAM_SECT
- * IDE_PARAM_HEAD
- * IDE_PARAM_CYLS
+ *  - A: Sector number
+ *	- X: Cylinder HIGH 
+ *  - Y: Cylinder LOW
  * RETURNS:
  *	- A: $00 OK, $FF ERROR
  */
-IDErdSector_P:	.(
+#if 0
+IDErdSector:	.(
 			php
-	
-			clc
-
-			// Set LBA data
+		
+			// Send LBA data
 			// push the parameters
-			lda IDE_PARAM_SECT
-			pha
-			lda IDE_PARAM_HEAD
-			pha
-			lda IDE_PARAM_CYLS
-			pha // Cyl LOW
-			lda IDE_PARAM_CYLS+$1
-			pha // Cyl HIGH 
+			pha // Sector
+			lda #SHD_REG_Config
+			pha // SHD
+			phy // Cyl LOW
+			phx // Cyl HIGH
 			jsr IDESetLBA
 
 			// Wait for disk not busy
@@ -540,30 +536,34 @@ Done:
 
 			rts
 			.)
-
-
+#else
 /* IDE read sector
  * INVALIDATED REGISTERS:
  *	- X,Y,A
  *
  * PARAMETERS:
- *  - A: Sector number
- *	- X: Cylinder HIGH 
- *  - Y: Cylinder LOW
+ * Must be written into
+ * IDE_PARAM_SECT
+ * IDE_PARAM_HEAD
+ * IDE_PARAM_CYLS
  * RETURNS:
  *	- A: $00 OK, $FF ERROR
  */
-#if 0
 IDErdSector:	.(
 			php
-		
-			// Send LBA data
+	
+			clc
+
+			// Set LBA data
 			// push the parameters
-			pha // Sector
-			lda #SHD_REG_Config
-			pha // SHD
-			phy // Cyl LOW
-			phx // Cyl HIGH
+			lda IDE_PARAM_SECT
+			pha
+			lda IDE_PARAM_HEAD
+			pha
+			lda IDE_PARAM_CYLS
+			pha // Cyl LOW
+			lda IDE_PARAM_CYLS+$1
+			pha // Cyl HIGH 
 			jsr IDESetLBA
 
 			// Wait for disk not busy
@@ -714,8 +714,7 @@ Done:
 
 			rts
 				.)
-#endif
-
+#else
 /* IDE write sector
  * INVALIDATED REGISTERS:
  *	- X,Y,A
@@ -727,7 +726,7 @@ Done:
  * RETURNS:
  *	- A: $00 OK, $FF ERROR
  */
-IDEwrSector_P:	.(
+IDEwrSector:	.(
 			php
 
 			clc
@@ -832,7 +831,7 @@ Done:
 
 			rts
 				.)
-
+#endif
 
 /* IDE set LBA address
  * INVALIDATED REGISTERS:
