@@ -93,7 +93,8 @@ SECT_LOOP:
 			sta IDE_PARAM_SECT
 			bra SECT_LOOP_END
 SECT_LOOP_REP:
-			dec SECT_LOOP_REP
+			jsr PRINT_SEC
+			dec IDE_PARAM_SECT
 			bra SECT_LOOP
 SECT_LOOP_END:
 
@@ -103,17 +104,19 @@ SECT_LOOP_END:
 			sta IDE_PARAM_HEAD
 			bra HEAD_LOOP_END
 HEAD_LOOP_REP:
-			dec HEAD_LOOP_REP
-			jsr PRINT_CYCLE
+			jsr PRINT_HEA
+			dec IDE_PARAM_HEAD
 			bra HEAD_LOOP
 HEAD_LOOP_END:
+			jsr PRINT_CYL
 		
 			lda IDE_PARAM_CYLS+$01
 			bne CYL_LOOP_REP
 			lda IDE_PARAM_CYLS+$00
 			beq LOOP_END
 			dec IDE_PARAM_CYLS+$00
-			lda IDE_DDATA_CYLS+$01
+			;lda IDE_DDATA_CYLS+$01
+			lda #$FF
 			sta IDE_PARAM_CYLS+$01
 			bra CYL_LOOP
 CYL_LOOP_REP:
@@ -131,18 +134,42 @@ LOOP_END:
 #include "n8vem-ide.a65"
 
 // ******* UTILITY FUNCS *******
-PRINT_CYCLE:	.(
+PRINT_SEC:	.(
 		pha
 		php
-		lda	#<PCYC
+		lda	#<PSEC
 		sta ZSC_BASE
-		lda #>PCYC
+		lda #>PSEC
 		sta ZSC_BASE+1
 		jsr PRINT_STRING
-		
 		plp
 		pla
+		rts
+		.)
 
+PRINT_HEA:	.(
+		pha
+		php
+		lda	#<PHEA
+		sta ZSC_BASE
+		lda #>PHEA
+		sta ZSC_BASE+1
+		jsr PRINT_STRING
+		plp
+		pla
+		rts
+		.)
+
+PRINT_CYL:	.(
+		pha
+		php
+		lda	#<PCYL
+		sta ZSC_BASE
+		lda #>PCYL
+		sta ZSC_BASE+1
+		jsr PRINT_STRING
+		plp
+		pla
 		rts
 		.)
 
@@ -265,3 +292,7 @@ PBREAD:	.asc "BREAD",$0a,$0d,0
 PCYC:	.asc "CYCLE",$0a,$0d,$07,0
 PDEB01:	.asc "DEB01",$0a,$0d,0
 PDEB02:	.asc "DEB02",$0a,$0d,0
+
+PCYL:	.asc "CYL ###",$0a,$0d,$07,$07,$07,0
+PHEA:	.asc "HEA ##",$0a,$0d,$07,$07,0
+PSEC:	.asc "SEC #",$0a,$0d,$07,0
