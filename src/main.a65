@@ -84,6 +84,7 @@ CLEAR2:
 CYL_LOOP:
 HEAD_LOOP:
 SECT_LOOP:
+
 			jsr IDEwrSector
 
 			lda IDE_PARAM_SECT
@@ -103,6 +104,7 @@ SECT_LOOP_END:
 			bra HEAD_LOOP_END
 HEAD_LOOP_REP:
 			dec HEAD_LOOP_REP
+			jsr PRINT_CYCLE
 			bra HEAD_LOOP
 HEAD_LOOP_END:
 		
@@ -129,13 +131,31 @@ LOOP_END:
 #include "n8vem-ide.a65"
 
 // ******* UTILITY FUNCS *******
+PRINT_CYCLE:	.(
+		pha
+		php
+		lda	#<PCYC
+		sta ZSC_BASE
+		lda #>PCYC
+		sta ZSC_BASE+1
+		jsr PRINT_STRING
+		
+		plp
+		pla
+
+		rts
+		.)
+
 PRINT_DEB:	.(
 		pha
+		php
 		lda	#<PDEB01
 		sta ZSC_BASE
 		lda #>PDEB01
 		sta ZSC_BASE+1
 		jsr PRINT_STRING
+		
+		plp
 		pla
 
 		rts
@@ -242,5 +262,6 @@ PBUSYDRQ:	.asc "IDE BUSY DRQ",$0a,$0d,0
 
 PBREAD:	.asc "BREAD",$0a,$0d,0
 
+PCYC:	.asc "CYCLE",$0a,$0d,$07,0
 PDEB01:	.asc "DEB01",$0a,$0d,0
 PDEB02:	.asc "DEB02",$0a,$0d,0

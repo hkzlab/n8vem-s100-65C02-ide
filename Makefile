@@ -12,4 +12,4 @@ clean:
 	rm -rf $(BIN_DIR)/*
 
 install: $(BIN_DIR)/65ide
-	cp	$(BIN_DIR)/65ide $(DEST_DIR)
+	xmodem -m 8N1 -s 19200 -p /dev/cu.usbserial -i $(BIN_DIR)/65ide
