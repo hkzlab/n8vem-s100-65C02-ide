@@ -82,6 +82,7 @@ IDEInit:	.(
 			php
 
 			// Set the 8255 to INPUT
+			lda CFG8255_INPUT 
 			sta	IDEctrl
 
 			// Reset the IDE drive
